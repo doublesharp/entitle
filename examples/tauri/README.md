@@ -18,8 +18,11 @@ Tauri 2 SDK. The updater initialization in `lib.rs` is:
 ```rust
 mod updates;
 // In the existing tauri::Builder chain:
+// Step 1: enable the native updater that verifies signed packages.
 .plugin(tauri_plugin_updater::Builder::new().build())
+// Step 2: keep the pending update in Rust, shared across serialized settings commands.
 .manage(updates::Updates(tokio::sync::Mutex::new(None)))
+// Step 3: expose the lifecycle to your local settings UI, with install consent in that UI.
 .invoke_handler(tauri::generate_handler![
     updates::activate, updates::deactivate, updates::activation_status,
     updates::check_update, updates::install_update

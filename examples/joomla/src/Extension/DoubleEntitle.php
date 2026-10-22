@@ -11,14 +11,28 @@ use Joomla\Database\DatabaseInterface;
 use Joomla\Event\SubscriberInterface;
 use Joomla\CMS\Event\Installer\BeforePackageDownloadEvent;
 
-/** Joomla 5.4/6 transport. Called only by an administrator's protected settings action. */
+/**
+ * Joomla installer plugin for license settings and authenticated native updates.
+ *
+ * Joomla calls the subscribed download hooks. Call activate/status/deactivate only
+ * from an administrator controller that checks CSRF and core.manage permission.
+ * The persistent UUID and token live in this plugin row's custom_data, separate
+ * from form-managed params. License state never gates installed extension features.
+ */
 final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
 {
+    /** @return array<string, string> Native feed/package events mapped to our header hook. */
     public static function getSubscribedEvents(): array
     {
         return ['onInstallerBeforeUpdateSiteDownload' => 'headers', 'onInstallerBeforePackageDownload' => 'headers'];
     }
 
+    /**
+     * Validate administrator settings before constructing authenticated URLs.
+     *
+     * @return array{0: string, 1: string} HTTPS tenant API base and product slug.
+     * @throws \RuntimeException If either setting is invalid.
+     */
     private function config(): array
     {
         $base = rtrim((string) $this->params->get('api_base'), '/');
@@ -31,7 +45,15 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return [$base, $product];
     }
 
-    // Public so an admin controller can call the same scoped check in tests.
+    /**
+     * Limit credentials to the exact product feed or immutable package path.
+     * Public so controllers and tests can use the same check without sending HTTP.
+     *
+     * @param string $base Validated tenant API base.
+     * @param string $product Validated product slug.
+     * @param string $url Candidate URL supplied by Joomla's installer.
+     * @return bool Whether the URL's origin and path may receive our token.
+     */
     public static function permits(string $base, string $product, string $url): bool
     {
         $a = parse_url($base); $b = parse_url($url);
@@ -42,6 +64,13 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return (bool) preg_match('~^' . preg_quote($a['path'] . '/packages/' . $product . '/assets/', '~') . '[A-Za-z0-9-]+/[A-Za-z0-9._-]+$~D', $path);
     }
 
+    /**
+     * Add Authorization to an allowed native request when a valid token is stored.
+     * Unrelated requests and missing/invalid configuration are left unchanged.
+     *
+     * @param BeforePackageDownloadEvent $event Feed event or package-download event.
+     * @return void
+     */
     public function headers(BeforePackageDownloadEvent $event): void
     {
         try { [$base, $product] = $this->config(); } catch (\RuntimeException $e) { return; }
@@ -53,6 +82,13 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         $event->updateHeaders($headers);
     }
 
+    /**
+     * Restrict a query to this installer plugin's own extension row.
+     *
+     * @param object $db Joomla database driver used for quoting.
+     * @param object $query Select/update query to constrain.
+     * @return object The same query with the plugin identity conditions added.
+     */
     private function rowConditions(object $db, object $query): object
     {
         return $query->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))
@@ -60,6 +96,13 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
             ->where($db->quoteName('element') . ' = ' . $db->quote('doubleentitle'));
     }
 
+    /**
+     * Load custom_data as an object, preserving unrelated keys and original bytes.
+     * The original value detects concurrent changes during a later write.
+     *
+     * @return array{0: DatabaseInterface, 1: string|null, 2: \stdClass} Driver, raw JSON, document.
+     * @throws \RuntimeException If the row is missing or existing data cannot be edited safely.
+     */
     private function document(): array
     {
         $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -76,6 +119,12 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return [$db, $raw, $document];
     }
 
+    /**
+     * Read our reserved state object, falling back to legacy prototype params.
+     *
+     * @param \stdClass $document Validated custom_data document.
+     * @return array<string, mixed> Installation/token state, excluding unrelated custom data.
+     */
     private function documentState(\stdClass $document): array
     {
         if (property_exists($document, 'double_entitle')) { return (array) $document->double_entitle; }
@@ -88,9 +137,18 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return $state;
     }
 
+    /**
+     * Change license state without overwriting concurrent or unrelated custom data.
+     * The callback may run again after contention, so it must not perform external I/O.
+     *
+     * @param callable(array): array $change Transform the latest persisted license state.
+     * @return array<string, mixed> State successfully stored, or already current.
+     * @throws \RuntimeException If contention prevents a write after five attempts.
+     */
     private function mutateState(callable $change): array
     {
         for ($attempt = 0; $attempt < 5; $attempt++) {
+            // Step 1: read the latest document and change only our reserved object.
             [$db, $raw, $document] = $this->document();
             $state = $change($this->documentState($document));
             $document->double_entitle = (object) $state;
@@ -98,13 +156,16 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
             if ($encoded === $raw) { return $state; }
             $query = $this->rowConditions($db, $db->getQuery(true)->update($db->quoteName('#__extensions'))
                 ->set($db->quoteName('custom_data') . ' = ' . $db->quote($encoded)));
+            // Step 2: write only if custom_data still matches what we read.
             $query->where($db->quoteName('custom_data') . ($raw === null ? ' IS NULL' : ' = ' . $db->quote($raw)));
             $db->setQuery($query)->execute();
             if ($db->getAffectedRows() > 0) { return $state; }
+            // Step 3: another writer won; reread and reapply instead of overwriting it.
         }
         throw new \RuntimeException('License settings changed concurrently. Try again.');
     }
 
+    /** @return array<string, mixed> Current state, migrating legacy params on first use. */
     private function state(): array
     {
         [, , $document] = $this->document();
@@ -115,6 +176,11 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return $state;
     }
 
+    /**
+     * Persist a random UUID once, reusing the winner if another request creates it first.
+     *
+     * @return string Installation identity retained across updates and deactivation.
+     */
     public function installationId(): string
     {
         $state = $this->state();
@@ -129,6 +195,16 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return $state['installation_id'];
     }
 
+    /**
+     * Send JSON through Joomla HTTP with no redirects and a timeout.
+     * Transport details become fixed errors safe for the settings UI.
+     *
+     * @param string $path Fixed path relative to the configured tenant API.
+     * @param array|null $body POST fields, or null for GET; an empty array sends {}.
+     * @param bool $authenticated Attach the token; false only for activation.
+     * @return array<string, mixed> Decoded response data.
+     * @throws \RuntimeException If configuration, credentials, transport, or response fails.
+     */
     private function request(string $path, ?array $body, bool $authenticated): array
     {
         [$base] = $this->config();
@@ -149,6 +225,13 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         return $result;
     }
 
+    /**
+     * Exchange an administrator's key for a validated installation token.
+     *
+     * @param string $key Key from the protected settings form; clear the field afterward.
+     * @return void Only the returned token is persisted, never the raw key.
+     * @throws \RuntimeException If activation, validation, or persistence fails.
+     */
     public function activate(string $key): void
     {
         [, $product] = $this->config();
@@ -159,8 +242,15 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         });
     }
 
+    /** @return array<string, mixed> Server-side activation details for administrator settings. */
     public function status(): array { return $this->request('/activation', null, true); }
 
+    /**
+     * Release server access before clearing the token, retaining the UUID and installed features.
+     *
+     * @return void
+     * @throws \RuntimeException If the request or local state update fails.
+     */
     public function deactivate(): void
     {
         $this->request('/deactivate', [], true);

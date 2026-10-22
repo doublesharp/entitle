@@ -9,10 +9,17 @@
  * License: MIT
  * License URI: https://opensource.org/license/mit
  */
+// Step 1: load only inside WordPress, then include the reusable update client.
 if (!defined('ABSPATH')) { exit; }
 require_once __DIR__ . '/class-double-entitle-client.php';
+// Step 2: identify this plugin/version and register native update and settings hooks.
 $GLOBALS['double_entitle_client'] = new Double_Entitle_Client(__FILE__, '1.0.0');
 // Register first. Place real product PHP/WP/Free feature compatibility gates below this line.
 $GLOBALS['double_entitle_client']->register();
-// This harmless installed feature has no dependency on license or service availability.
+// Step 3: register installed functionality independently of update-license status.
+/**
+ * Render [double_entitle_example] without contacting the licensing service.
+ *
+ * @return string Example content that remains available after update access expires.
+ */
 add_shortcode('double_entitle_example', function () { return 'Double Entitle installed features are available.'; });

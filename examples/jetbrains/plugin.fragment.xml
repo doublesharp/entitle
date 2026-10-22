@@ -1,5 +1,7 @@
 <idea-plugin>
+  <!-- Merge this registration into your existing plugin.xml, keeping its ID/version/IDE requirements. -->
   <extensions defaultExtensionNs="com.intellij">
+    <!-- Let native feed and package requests obtain scoped headers from the saved activation token. -->
     <pluginRepositoryAuthProvider implementation="example.licensing.LicenseRepositoryAuth"/>
   </extensions>
 </idea-plugin>

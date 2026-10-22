@@ -12,13 +12,16 @@ import { join } from 'node:path';
 import { createClient } from '../generic/client.mjs';
 import { electronStorage } from './storage.mjs';
 import { configureElectronUpdater } from './updater.mjs';
+// Step 1: wait for Electron's OS credential services, then load this product's identity.
 await app.whenReady();
 const client = await createClient({ api, product: 'my-app',
   storage: electronStorage(join(app.getPath('userData'), 'my-app-license'), safeStorage) });
-// Settings actions, only after user interaction:
+// Step 2: activate from a settings action; clear the key input after the request.
 await client.activate(licenseKeyFromSettings, 'Work laptop');
+// Step 3: choose this build's published target and configure authenticated native checks.
 const target = `${process.platform === 'win32' ? 'windows' : process.platform}-${process.arch}`;
 const updater = await configureElectronUpdater(client, electronUpdater.autoUpdater, target, showUpdateError);
+// Step 4: check for an offer. Configuration keeps automatic downloads disabled.
 await updater.checkForUpdates();
 // After user accepts an update, await updater.downloadUpdate().
 // Once update-downloaded fires and user accepts restart, updater.quitAndInstall().

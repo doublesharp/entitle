@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+  <!-- Step 1: trust packages signed by your build system's private key. Ship only the public key. -->
   <key>SUPublicEDKey</key><string>REPLACE_WITH_YOUR_SPARKLE_ED25519_PUBLIC_KEY</string>
+  <!-- Step 2: leave automatic checks off initially; wire license settings through LicenseUpdates. -->
   <key>SUEnableAutomaticChecks</key><false/>
+  <!-- Step 3: set a credential-free feed for this product and architecture. The delegate selects it at runtime. -->
   <key>SUFeedURL</key><string>https://licenses.example.com/api/v1/tenants/publisher/updates/sparkle/my-app/darwin-universal/appcast.xml</string>
 </dict></plist>
