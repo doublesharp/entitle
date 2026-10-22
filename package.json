@@ -11,18 +11,23 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env src/server.ts",
     "cli": "node --env-file-if-exists=.env src/cli.ts",
-    "test": "node --test --test-concurrency=1 tests/*.test.ts web/*.test.ts",
+    "test": "node --test --test-concurrency=1 tests/*.test.ts tests/*.test.mjs web/*.test.ts",
+    "test:web": "pnpm --filter @entitle/web test",
+    "typecheck:web": "pnpm --filter @entitle/web typecheck",
+    "lint:web": "pnpm --filter @entitle/web lint",
     "test:core": "node --test --test-concurrency=1 tests/core.test.ts",
     "test:invariants": "node --test --test-concurrency=1 tests/invariants-*.test.ts",
     "test:fuzz": "FUZZ_RUNS=${FUZZ_RUNS:-500} FUZZ_COMMANDS=${FUZZ_COMMANDS:-100} node --test --test-concurrency=1 tests/invariants-*.test.ts",
     "coverage": "node scripts/coverage.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src tests web scripts/*.ts",
+    "lint": "eslint src tests web packages scripts/*.ts",
     "build": "node scripts/build.ts",
     "start": "node --env-file-if-exists=.env scripts/start.ts",
-    "maintenance": "node --env-file-if-exists=.env src/maintenance-cli.ts"
+    "maintenance": "node --env-file-if-exists=.env src/maintenance-cli.ts",
+    "build:server": "pnpm --filter @entitle/server build",
+    "build:web": "pnpm --filter @entitle/web build"
   },
-  "dependencies": {
+  "devDependencies": {
     "@0xdoublesharp/adaptive-cache": "0.2.1",
     "@0xdoublesharp/lru-cache-clustered": "2.1.2",
     "@aws-sdk/client-s3": "3.1155.0",
@@ -30,7 +35,6 @@
     "@fastify/helmet": "13.2.0",
     "@fastify/rate-limit": "11.2.1",
     "@fastify/static": "10.1.6",
-    "@stripe/stripe-js": "10.1.0",
     "better-sqlite3": "13.0.3",
     "fast-xml-parser": "5.11.2",
     "fastify": "5.12.7",
@@ -42,11 +46,10 @@
     "pg": "8.23.1",
     "semver": "7.8.5",
     "stripe": "23.0.0",
-    "vue": "3.5.44",
     "yauzl": "3.4.0",
-    "zod": "4.6.7"
-  },
-  "devDependencies": {
+    "zod": "4.6.7",
+    "vue": "3.5.44",
+    "@stripe/stripe-js": "10.1.0",
     "@babel/core": "8.0.7",
     "@babel/eslint-parser": "8.0.7",
     "@babel/plugin-syntax-typescript": "8.0.3",

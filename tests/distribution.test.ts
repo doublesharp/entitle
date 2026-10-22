@@ -93,7 +93,7 @@ test("source distribution includes reviewed files and excludes private configura
   await assert.rejects(packageSource(root, out), /Symbolic links/);
 });
 
-test("real source manifest contains the complete reviewed tree and Docker supplies all root inputs", async () => {
+test("real source manifest contains the complete reviewed tree", async () => {
   const { sourceFiles } = await import("../scripts/distribution.ts");
   const expected = (await readFile("scripts/source-files.txt", "utf8"))
     .trim()
@@ -102,13 +102,7 @@ test("real source manifest contains the complete reviewed tree and Docker suppli
   assert.deepEqual(await sourceFiles(process.cwd()), expected);
   for (const path of [".github/CONTRIBUTING.md", "deploy/compose.yaml", "deploy/compose.test.yaml"])
     assert.ok(expected.includes(path), `Source archive omits relocated ${path}`);
-  const docker = (await readFile("Dockerfile", "utf8")).split("\nFROM ")[0]!;
-  const copied = docker
-    .split("\n")
-    .filter((l) => l.startsWith("COPY "))
-    .flatMap((l) => l.slice(5).trim().split(/\s+/).slice(0, -1));
-  for (const path of expected)
-    assert.ok(copied.some((input) => input === path || path.startsWith(`${input}/`)), `Dockerfile does not supply ${path}`);
+
 });
 
 for (const status of [200, 503]) {
@@ -144,3 +138,17 @@ for (const status of [200, 503]) {
     assert.equal(code, status === 200 ? 0 : 1);
   });
 }
+
+
+test("server Docker build excludes frontend, tests, docs and production configuration", async () => {
+  const docker = await readFile("Dockerfile", "utf8");
+  const copied = docker.split("\n").filter((line) => line.startsWith("COPY ") && !line.includes("--from="));
+  for (const line of copied) {
+    assert.doesNotMatch(line, /(?:^|\s)(web|tests|docs|deploy|\.github|\.env|\.env\.example)(?:\/|\s)/);
+    assert.doesNotMatch(line, /^COPY \. /);
+  }
+  assert.match(docker, /--filter @entitle\/server/);
+  assert.doesNotMatch(docker, /pnpm (?:build(?:\s|$)|typecheck|lint)/);
+  assert.doesNotMatch(docker, /COPY.*\/build\/web/);
+  assert.match(docker, /EXPOSE 3211/);
+});

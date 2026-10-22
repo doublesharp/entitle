@@ -1,6 +1,6 @@
 import { h } from "vue";
 import type { VNodeChild } from "vue";
-import { site } from "../src/site.ts";
+import { site } from "../packages/shared/site.ts";
 
 interface ServerInfo {
   maxUploadBytes: number;

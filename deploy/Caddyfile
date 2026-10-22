@@ -1,4 +1,4 @@
 {$PUBLIC_ORIGIN} {
-    reverse_proxy app:3211
+    reverse_proxy web:8080
     # No access log: authentication headers and URL credentials must not be recorded.
 }

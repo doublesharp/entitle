@@ -4,6 +4,6 @@ const out = resolve(
   process.env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main",
 );
 const { startServer } = await import(
-  pathToFileURL(`${out}/src/server.js`).href
+  pathToFileURL(`${out}/server/src/server.js`).href
 );
 await startServer();

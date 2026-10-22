@@ -18,7 +18,7 @@ import {
   seatUnit,
 } from "./frameworks.ts";
 import { SellerFeaturePanel } from "./features.ts";
-import { site } from "../src/site.ts";
+import { site } from "../packages/shared/site.ts";
 import {
   CheckoutController,
   emptyCheckoutState,

@@ -1,0 +1,225 @@
+name: Entitle CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_DIR: /Volumes/Scratch/entitle/build/ci
+  TMPDIR: /Volumes/Scratch/entitle/tmp/ci
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.changes.outputs.server }}
+      runtime: ${{ steps.changes.outputs.runtime }}
+      server_hash: ${{ steps.changes.outputs.server_hash }}
+      runtime_hash: ${{ steps.changes.outputs.runtime_hash }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          server_hash=$(git ls-files -z -- Dockerfile .dockerignore package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .node-version apps/server packages/shared src scripts/build-server.ts LICENSE ADDITIONAL-PERMISSION.md NOTICE | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)
+          runtime_hash=$(git ls-files -z -- deploy/runtime.Dockerfile deploy/runtime-entrypoint.sh deploy/nginx.conf.template .dockerignore | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)
+          server=true
+          runtime=true
+          if docker manifest inspect "ghcr.io/doublesharp/entitle-server:input-$server_hash" >/dev/null 2>&1; then server=false; fi
+          if docker manifest inspect "ghcr.io/doublesharp/entitle-web-runtime:input-$runtime_hash" >/dev/null 2>&1; then runtime=false; fi
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
+            server=true
+            runtime=true
+          else
+            while IFS= read -r file; do
+              case "$file" in
+                tests/*.test.ts|.github/workflows/*) server=true ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA" HEAD)
+          fi
+          printf 'server=%s\nruntime=%s\n' "$server" "$runtime" >> "$GITHUB_OUTPUT"
+          printf 'server_hash=%s\nruntime_hash=%s\n' "$server_hash" "$runtime_hash" >> "$GITHUB_OUTPUT"
+
+  server-checks:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash scripts/deployment/setup-ci.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: /Volumes/Scratch/entitle/cache/pnpm
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+      - run: |
+          npm install --global pnpm@12.14.0
+          pnpm install --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
+      - run: pnpm typecheck && pnpm lint && pnpm test
+      - run: pnpm build:server
+
+  frontend:
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: production
+      FRONTEND_RUNTIME_SMOKE: ${{ needs.changes.outputs.runtime == 'true' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash scripts/deployment/setup-ci.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: /Volumes/Scratch/entitle/cache/pnpm
+          key: web-pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+      # This private build package owns its entire toolchain as dependencies.
+      # pnpm also installs root deps when filtered; --prod excludes root devDeps.
+      - run: |
+          npm install --global pnpm@12.14.0
+          pnpm --filter @entitle/web... install --prod --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
+      - run: pnpm typecheck:web && pnpm lint:web && pnpm test:web
+      - run: pnpm build:web
+      - run: node --test tests/frontend-release.test.mjs
+      - name: Pack immutable frontend
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node scripts/deployment/frontend-release.mjs pack --input "$BUILD_DIR/web" --output "$BUILD_DIR/frontend.tar" --source-sha "$SOURCE_SHA" > "$BUILD_DIR/frontend.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: frontend-${{ github.sha }}
+          path: |
+            /Volumes/Scratch/entitle/build/ci/frontend.tar
+            /Volumes/Scratch/entitle/build/ci/frontend.json
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+
+  server-image:
+    needs: [changes, server-checks]
+    if: always() && github.event_name != 'pull_request' && needs.changes.result == 'success' && (needs.server-checks.result == 'success' || needs.server-checks.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: cached
+        env:
+          IMAGE: ghcr.io/doublesharp/entitle-server:input-${{ needs.changes.outputs.server_hash }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+          if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          fi
+      - id: image
+        if: steps.cached.outputs.digest == ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/doublesharp/entitle-server:source-${{ github.sha }}
+            ghcr.io/doublesharp/entitle-server:input-${{ needs.changes.outputs.server_hash }}
+          cache-from: type=gha,scope=entitle-server
+          cache-to: type=gha,scope=entitle-server,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/doublesharp/entitle
+            org.opencontainers.image.revision=${{ github.sha }}
+      - env:
+          DIGEST: ${{ steps.cached.outputs.digest || steps.image.outputs.digest }}
+        run: printf '%s\n' "$DIGEST" > server-digest.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: server-image-${{ github.sha }}
+          path: server-digest.txt
+          retention-days: 7
+
+  web-runtime:
+    needs: changes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: cached
+        env:
+          IMAGE: ghcr.io/doublesharp/entitle-web-runtime:input-${{ needs.changes.outputs.runtime_hash }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+          if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          fi
+      - id: image
+        if: steps.cached.outputs.digest == ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: deploy/runtime.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/doublesharp/entitle-web-runtime:source-${{ github.sha }}
+            ghcr.io/doublesharp/entitle-web-runtime:input-${{ needs.changes.outputs.runtime_hash }}
+          cache-from: type=gha,scope=entitle-web-runtime
+          cache-to: type=gha,scope=entitle-web-runtime,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/doublesharp/entitle
+            org.opencontainers.image.revision=${{ github.sha }}
+      - env:
+          DIGEST: ${{ steps.cached.outputs.digest || steps.image.outputs.digest }}
+        run: printf '%s\n' "$DIGEST" > runtime-digest.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: web-runtime-${{ github.sha }}
+          path: runtime-digest.txt
+          retention-days: 7
