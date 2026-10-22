@@ -1,0 +1,7 @@
+{
+  "changelog": "Initial Pro release.",
+  "minWp": "6.0",
+  "minPhp": "8.0",
+  "minFree": "1.0.0",
+  "tested": "7.0"
+}

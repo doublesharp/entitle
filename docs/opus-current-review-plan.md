@@ -1,0 +1,13 @@
+# Current Opus 5.5 review fixes
+
+The 2026-10-21 review requested B1 and identified B2/B3. The user authorized fixing findings that can be verified. Keep the existing architecture and refund policy.
+
+1. Reproduce B1 with the real Stripe SDK against local HTTP fixtures: deleted/email-less unrelated subscriptions must finish as no-ops; existing licenses must still reconcile; paid issuance without a usable customer email must remain retryable and issue nothing. Move the email requirement from snapshot collection to the existing customer-creation check.
+2. Deduplicate scheduled reconciliation under the database work lock using a stable, hashed subscription job ID. Pending/running jobs keep their lease and retry schedule. A completed job can be reset for the next scheduled pass. Test repeated/concurrent scheduling, an in-flight worker, completion and retries on SQLite/PostgreSQL/MySQL. Webhook jobs retain their independent event IDs.
+3. Reproduce B2 with a signed-in Vue account and visible replacement key. A failed login-link confirmation must preserve account, key and CSRF; successful identity switching must still clear the old account. Give the unauthenticated consume operation its own unauthorized-error policy in the existing action wrapper.
+4. Run strict typecheck, lint, full 100% per-module coverage, production build and real database regressions. Refresh B3's documentation counts from the resulting artifacts.
+5. Send the original brief, findings, dispositions and exact changed files to a fresh Opus 5.5 review task. Report its verdict and integration limits. Keep raw evidence on Scratch and remove only task-owned fixtures.
+
+No terminal retry policy, new infrastructure or unrelated risk remediation is added. Missing-email paid purchases remain retryable so an operator can correct the billing customer and recover issuance.
+
+Completed 2026-10-21. Opus 5.5 round 2 returned **ACCEPT** for spec compliance and code quality, confirming B1/B2/B3 resolved with no blocking findings. All 85 reviewed fingerprints matched before this status update; application and test files remain unchanged. Final verification passed 185 tests with 100% lines, branches and functions across all 19 TypeScript modules. PostgreSQL and MySQL each passed 49 regressions with one SQLite-only hook skipped; TS7, lint, production build and compiled startup passed. Disposable task fixtures were removed. The review and acceptance receipt are retained under `/Volumes/Scratch/double-entitle-wp/reports/opus55-current-20261021/`. Stripe remains qualified by local SDK fixtures; the full WordPress installation matrix was not rerun, and multisite remains untested.

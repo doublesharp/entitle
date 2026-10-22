@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<extension type="plugin" group="installer" method="upgrade">
+  <name>Double Entitle installer transport</name>
+  <version>1.0.0</version>
+  <license>MIT</license>
+  <namespace path="src">DoubleEntitle\Plugin\Installer\DoubleEntitle</namespace>
+  <files><filename>LICENSE</filename><folder plugin="doubleentitle">services</folder><folder>src</folder></files>
+  <config><fields name="params"><fieldset name="basic">
+    <field name="api_base" type="url" label="HTTPS tenant API URL" required="true" />
+    <field name="product" type="text" label="Product slug" required="true" />
+  </fieldset></fields></config>
+</extension>

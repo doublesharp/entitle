@@ -1,0 +1,126 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: entitle-test
+      POSTGRES_DB: entitle
+    ports: ["127.0.0.1:55432:5432"]
+    volumes:
+      [
+        "${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/postgres:/var/lib/postgresql",
+      ]
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: entitle-test
+      MYSQL_DATABASE: entitle
+    ports: ["127.0.0.1:53306:3306"]
+    volumes:
+      [
+        "${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/mysql:/var/lib/mysql",
+      ]
+  mail:
+    image: axllent/mailpit:v1.30.0
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+  wordpress:
+    image: wordpress:php8.3-apache
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: entitle-test
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: &wordpress-config-extra |
+        define('DOUBLE_ENTITLE_API_URL', 'http://localhost:3211/api/v1/tenants/primary');
+        define('DOUBLE_ENTITLE_ALLOW_HTTP', true);
+        define('DOUBLE_ENTITLE_FREE_VERSION', '1.0.0');
+        define('WP_TEMP_DIR', '/wp-tmp');
+        define('FS_METHOD', 'direct');
+        define('AUTOMATIC_UPDATER_DISABLED', false);
+    ports: ["127.0.0.1:8088:80"]
+    volumes:
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wordpress:/var/www/html
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wp-tmp:/wp-tmp
+  wordpress-relay:
+    image: alpine/socat@sha256:22d77becaeeea8ef56b8c4bb2312323acafe85354be6a85714ff5050e3537842
+    profiles: [wordpress]
+    network_mode: service:wordpress
+    depends_on: [wordpress]
+    entrypoint: [/usr/bin/socat]
+    command:
+      [
+        "TCP-LISTEN:3211,fork,reuseaddr,bind=127.0.0.1",
+        "TCP:host.docker.internal:3211",
+      ]
+  wordpress-loopback:
+    image: alpine/socat@sha256:22d77becaeeea8ef56b8c4bb2312323acafe85354be6a85714ff5050e3537842
+    profiles: [wordpress]
+    network_mode: service:wordpress
+    depends_on: [wordpress]
+    entrypoint: [/usr/bin/socat]
+    command:
+      ["TCP-LISTEN:8088,fork,reuseaddr,bind=127.0.0.1", "TCP:127.0.0.1:80"]
+  wpcli:
+    image: wordpress:cli-php8.3
+    profiles: [cli]
+    network_mode: service:wordpress
+    depends_on: [wordpress]
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: entitle-test
+      WORDPRESS_DB_NAME: wordpress
+      DOUBLE_ENTITLE_INTEGRATION: "1"
+      WORDPRESS_CONFIG_EXTRA: *wordpress-config-extra
+    volumes:
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wordpress:/var/www/html
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wp-tmp:/wp-tmp
+      - .:/workspace:ro
+
+  # Primary local recipe: node scripts/local-s3.ts up
+  # Optional container recipe: node scripts/local-s3.ts prepare;
+  # docker compose -f compose.test.yaml --profile s3 up -d --wait --wait-timeout 600 s3;
+  # node scripts/local-s3.ts bucket
+  # Run native OR container fixture: both publish loopback19000.
+  s3:
+    profiles: [s3]
+    image: golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2
+    env_file:
+      - path: ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/local-s3/integration.env
+        required: false
+    environment:
+      GOPATH: /scratch/cache/go
+      GOBIN: /scratch/cache/minio/compose-bin
+      GOMODCACHE: /scratch/cache/go-mod
+      GOCACHE: /scratch/cache/go-build-linux
+      GOTMPDIR: /scratch/tmp/minio-compose
+      TMPDIR: /scratch/tmp/minio-compose
+      TEST_TELEMETRY_DIR: /scratch/cache/go-telemetry-linux
+      GOTOOLCHAIN: local
+      GOSUMDB: sum.golang.org
+      MINIO_BROWSER: "off"
+      MINIO_UPDATE: "off"
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        : "$${MINIO_ROOT_USER:?Run node scripts/local-s3.ts prepare first}" "$${MINIO_ROOT_PASSWORD:?Run node scripts/local-s3.ts prepare first}"
+        mkdir -p "$$GOBIN" "$$GOCACHE" "$$GOMODCACHE" "$$TMPDIR" "$$TEST_TELEMETRY_DIR" /scratch/data/local-s3/compose-objects /scratch/data/local-s3/compose-certs /scratch/data/local-s3/compose-config
+        printf 'off\n' > "$$TEST_TELEMETRY_DIR/mode"
+        go install github.com/minio/minio@v0.0.0-20251015172955-9e49d5e7a648
+        exec "$$GOBIN/minio" --quiet --certs-dir /scratch/data/local-s3/compose-certs --config-dir /scratch/data/local-s3/compose-config server --address :9000 /scratch/data/local-s3/compose-objects
+    ports: ["127.0.0.1:19000:9000"]
+    healthcheck:
+      test:
+        [
+          CMD,
+          curl,
+          --fail,
+          --silent,
+          "http://127.0.0.1:9000/minio/health/ready",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 10m
+    volumes:
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}:/scratch

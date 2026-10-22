@@ -1,0 +1,5 @@
+<idea-plugin>
+  <extensions defaultExtensionNs="com.intellij">
+    <pluginRepositoryAuthProvider implementation="example.licensing.LicenseRepositoryAuth"/>
+  </extensions>
+</idea-plugin>

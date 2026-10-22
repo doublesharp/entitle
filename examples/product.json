@@ -1,0 +1,22 @@
+{
+  "slug": "validated-field-pro",
+  "name": "Validated Field for ACF Pro",
+  "plans": [
+    {
+      "name": "Personal annual",
+      "siteAllowance": 1,
+      "priceId": "price_REPLACE_1"
+    },
+    {
+      "name": "Studio annual",
+      "siteAllowance": 5,
+      "priceId": "price_REPLACE_5"
+    },
+    {
+      "name": "Agency annual",
+      "siteAllowance": 25,
+      "priceId": "price_REPLACE_25"
+    }
+  ],
+  "pluginBasename": "validated-field-pro/validated-field-pro.php"
+}

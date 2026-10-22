@@ -1,0 +1,139 @@
+# Getting started
+
+This walkthrough ends with a product in the catalog, a licensed installation,
+and an update delivered through its normal updater. Choose hosted setup,
+standalone production setup, or the local fixture first.
+
+## Choose who operates the service
+
+| Path                  | You provide                                                                           | Start here                                                            |
+| --------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Hosted publisher      | Your seller email, Stripe account, product builds and client integration              | Sign in at `/seller` on the operator's deployment.                    |
+| Self-hosted publisher | HTTPS server, database, private S3 bucket, SMTP, Stripe account and backups           | Follow [standalone deployment](deployment.md#self-hosted-standalone). |
+| Local development     | Pinned Node/pnpm, Docker for the mail fixture, and Go 1.27.1 for the source-built S3 fixture | Use the local procedure below. No paid services are required.         |
+
+The planned hosted address is recorded in the [README](../README.md). It does
+not establish service availability. Use the actual deployment origin supplied
+by your operator.
+
+Hosted sellers create a workspace, choose its permanent slug and connect Stripe
+from Billing. Standalone owners set `STANDALONE_OWNER_EMAIL` and sign in with
+that address. Verification grants access to the existing `primary` workspace.
+Standalone needs no Connect onboarding or platform subscription.
+
+Email links are single-use and bound to the browser that requested them. Open
+the link in that browser. Seller and buyer sign-ins are separate.
+
+## Run the local fixture
+
+Use the versions pinned in [toolchain](toolchain.md). In this macOS workspace,
+confirm `/Volumes/Scratch` is mounted before creating disposable output. Do not
+substitute the internal Data volume if it is missing.
+
+```sh
+export TMPDIR=/Volumes/Scratch/double-entitle-wp/tmp/setup
+mkdir -p "$TMPDIR"
+pnpm install --frozen-lockfile \
+  --store-dir /Volumes/Scratch/double-entitle-wp/cache/pnpm \
+  --virtual-store-dir /Volumes/Scratch/double-entitle-wp/cache/virtual-store
+node scripts/setup-local.ts
+node scripts/local-s3.ts up
+docker compose -p double-entitle-saas-test -f compose.test.yaml up -d mail
+pnpm build
+node --env-file=.env \
+  --env-file=/Volumes/Scratch/double-entitle-wp/data/local-s3/integration.env \
+  src/server.ts
+```
+
+`setup-local.ts` creates a private `.env` and refuses to overwrite one. Reuse an
+existing configuration rather than regenerating its secrets. The default owner
+for this fixture is `owner@example.test`. The S3 helper uses the pinned source
+fixture and requires exactly Go 1.27.1; `GO_BINARY` selects that executable.
+Inspect or stop only its owned process with `node scripts/local-s3.ts status` or `stop`.
+
+Open `http://localhost:3211/seller`, request a link for the configured owner,
+then read the email in Mailpit at `http://localhost:8025`. The default buyer page
+is `http://localhost:3211/t/primary`. The public guide is `/docs`.
+
+This fixture uses `LOCAL_BILLING=true`, which blocks real Stripe Checkout and
+Portal calls. Its purchase helper creates canonical test entitlement and queues
+license email. It does not collect money. Without `/Volumes/Scratch`, use
+[manual setup](../README.md#2-start-the-application-and-local-fixtures) with an
+existing private S3-compatible bucket and explicit persistent/build/cache/temp
+paths. Skip both setup helpers and the generated `integration.env`; no Go
+installation is needed for that alternative.
+
+## Create a product and plan
+
+1. In Products, choose the framework your build actually uses. WordPress needs
+   the exact `directory/main-file.php` plugin basename. Joomla and JetBrains
+   need their extension/plugin identity. Generic defaults to device activation.
+2. Create an active annual recurring price in the correct Stripe merchant
+   account and mode. Use the clearly labeled local price fixture in local mode.
+3. Add a plan with that price and its site/device allowance. The same API field,
+   `siteAllowance`, counts seats for either activation type.
+4. Save and check `/api/v1/tenants/YOUR_SLUG/catalog`. Confirm the product slug,
+   framework and plan IDs before adding checkout to another website.
+
+Framework configuration locks after the first license or release. Price-to-product
+and allowance mappings also persist. Add a new Stripe price when changing an
+allowance. See [seller guide](seller-guide.md#products-and-plans).
+
+## Publish version 1.0.0
+
+Use Releases in the dashboard. Browser publication requires a fresh emailed
+confirmation for that action. CI uses a scoped automation key instead.
+
+For WordPress, publish a ZIP whose main plugin header and directory match the
+product and version. For other frameworks, upload a package for an exact target
+and include the metadata required by its adapter. Tauri and Sparkle signatures
+come from your build system. Inspect [framework requirements](platform-support.md)
+before packaging.
+
+Publication validates the package, writes private immutable bytes, verifies
+storage readback, then commits the release. A release offer never points at an
+unfinished upload. The server reports separate WordPress and native upload caps
+under `/docs#server-limits`.
+
+## Purchase and activate
+
+For real test-mode commerce, use the merchant's test prices, matching keys and
+signed webhook endpoint from [deployment](deployment.md). A checkout redirect
+does not create paid rights; wait for canonical payment reconciliation.
+
+In the local fixture, create an API key in the seller dashboard with
+`licenses:write`. Set `TENANT_SLUG=primary` and supply `TENANT_API_KEY` privately
+through your environment or secret manager, then run:
+
+```sh
+pnpm cli demo-purchase PLAN_ID_FROM_CATALOG buyer@example.test
+```
+
+Read the license-key email in Mailpit. In your client, enter that key and
+activate one persisted installation ID. Site products also send `siteUrl`.
+Store the returned activation token in protected client storage. The raw
+license key is for activation; the installation token authenticates update
+checks and downloads. See [client integration](client-integration.md).
+
+For routine publisher testing on an existing deployment, use an isolated
+[sandbox](seller-guide.md#test-in-a-sandbox). Do not enable local billing on a
+production service.
+
+## Deliver an update
+
+Publish version 1.1.0 with changed bytes and the same framework identity. Run the
+client's normal update flow. Check the following before shipping your adapter:
+
+- Its feed selects the intended product and exact native target.
+- The downloaded package matches the offered checksum and required signature.
+- Installation preserves the installation ID and activation token.
+- An activation retry returns the existing token without consuming another seat.
+- Deactivation frees a seat; replacing a license key invalidates existing tokens.
+- An unavailable licensing server leaves installed functionality usable.
+
+Server tests and example compilation do not qualify native installation on every
+OS. Use the [recorded qualification limits](verification.md) to identify what
+you still need to exercise.
+
+Next, read the [seller guide](seller-guide.md), automate publication with the
+[CLI](cli.md), or use the [API reference](api.md).

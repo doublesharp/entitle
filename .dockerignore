@@ -1,0 +1,22 @@
+node_modules
+.git
+.env
+.npmrc
+dist
+.data
+.superpowers
+*.log
+
+# Private deployment inputs and disposable run output.
+.env.*
+!.env.example
+.aws/
+.codex/
+.agents/
+reports/
+cache/
+data/
+tmp/
+*.pem
+*.key
+*.p12

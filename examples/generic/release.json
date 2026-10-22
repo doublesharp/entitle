@@ -1,0 +1,5 @@
+{
+  "target": "linux-x64",
+  "filename": "app.bin",
+  "changelog": "Initial application release."
+}

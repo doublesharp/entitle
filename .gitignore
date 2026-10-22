@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env
+/.npmrc
+.data/
+.superpowers/
+*.tsbuildinfo
+coverage/
+*-evidence/
+*.log
+
+# Private deployment inputs and disposable run output.
+.env.*
+!.env.example
+.aws/
+.codex/
+.agents/
+reports/
+cache/
+data/
+tmp/
+*.pem
+*.key
+*.p12

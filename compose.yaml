@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      LOCAL_BILLING: "false"
+      DATA_DIR: /data
+      WORK_DIR: /data/work
+      WEB_DIR: /app/dist/web
+      PORT: 3211
+    volumes:
+      - ${ENTITLE_DATA_DIR:?Set ENTITLE_DATA_DIR to an absolute persistent directory}:/data
+    expose: ["3211"]
+    networks:
+      default:
+        ipv4_address: 172.30.81.3
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: ${ENTITLE_MEMORY_LIMIT:-768m}
+  proxy:
+    image: caddy:2.11.2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN to your HTTPS service origin}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${ENTITLE_DATA_DIR}/caddy-data:/data
+      - ${ENTITLE_DATA_DIR}/caddy-config:/config
+    networks:
+      default:
+        ipv4_address: 172.30.81.2
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.81.0/24

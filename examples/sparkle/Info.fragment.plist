@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>SUPublicEDKey</key><string>REPLACE_WITH_YOUR_SPARKLE_ED25519_PUBLIC_KEY</string>
+  <key>SUEnableAutomaticChecks</key><false/>
+  <key>SUFeedURL</key><string>https://licenses.example.com/api/v1/tenants/publisher/updates/sparkle/my-app/darwin-universal/appcast.xml</string>
+</dict></plist>

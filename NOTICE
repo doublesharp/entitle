@@ -1,0 +1,18 @@
+Double Entitle
+Copyright (c) 2026 Justin Silver
+
+The service, dashboard, build/deployment code, tests and documentation outside
+examples/ are available under Elastic License 2.0 in LICENSE together with
+Double Entitle Publisher Use Permission 1.0 in ADDITIONAL-PERMISSION.md.
+This is source-available software. The permission allows operating the service
+for your own software business, including buyer-facing portals and APIs.
+First-party adapter code and documentation in examples/ are licensed under MIT, as
+provided in examples/LICENSE and the per-adapter LICENSE files. First-party
+generated client integration code, client templates and setup snippets for inclusion
+in customer software are additionally available under Zero-Clause BSD in
+examples/GENERATED-CODE-LICENSE, with no attribution requirement. These grants
+do not relicense third-party dependencies or customer
+software. Existing third-party copyright and license notices remain in force.
+
+Double Entitle, Doublesharp Entitle and doublesharp names and marks identify the original project.
+The software licenses do not grant trademark rights or imply endorsement.

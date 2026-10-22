@@ -1,0 +1,15 @@
+{
+  "slug": "example-app",
+  "name": "Example application",
+  "framework": "generic",
+  "frameworkConfig": {
+    "activationKind": "device"
+  },
+  "plans": [
+    {
+      "name": "Personal annual",
+      "siteAllowance": 1,
+      "priceId": "price_REPLACE_APP"
+    }
+  ]
+}
