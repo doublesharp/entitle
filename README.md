@@ -103,7 +103,8 @@ your own products; see [License](#license).
 ### 1. Check prerequisites
 
 Use Node **26.12.0**, pnpm **12.14.0** and TypeScript **7.0.2**. The local
-fixtures also use Docker and Go. See the [toolchain guide](docs/toolchain.md).
+fixtures also use Docker and exactly Go **1.27.1** for the source-built S3
+fixture. See the [toolchain guide](docs/toolchain.md) for Node/pnpm details.
 
 On this macOS workspace, **`/Volumes/Scratch` must be mounted**. Keep caches,
 builds, temporary files and raw evidence there.
@@ -121,9 +122,9 @@ pnpm build
 node --env-file=.env --env-file=/Volumes/Scratch/double-entitle-wp/data/local-s3/integration.env src/server.ts
 ```
 
-The source-built MinIO fixture needs Go; set `GO_BINARY` if it is not
-`/opt/homebrew/bin/go`. Its pinned official source is a development fixture, not
-a production storage recommendation. `local-s3.ts up` builds/verifies it, starts
+The source-built MinIO fixture requires exactly Go 1.27.1; set `GO_BINARY` to
+that executable if it is not `/opt/homebrew/bin/go`. Its pinned official source
+is a development fixture, not a production storage recommendation. `local-s3.ts up` builds/verifies it, starts
 a loopback-only S3 server and creates a private bucket. `status` and `stop`
 manage only its recorded process. Alternatively supply credentials for another
 private S3-compatible bucket. No paid services or Stripe credentials are
@@ -131,9 +132,14 @@ required for local fixture mode.
 
 `setup-local.ts` creates a mode-0600 `.env` and refuses to overwrite an existing
 one. Reuse existing secrets instead of replacing them. Explicit pnpm cache flags
-remain necessary with pnpm 12. On Linux, copy `.env.example` and choose
-persistent/cache paths explicitly; the macOS setup helper deliberately requires
-Scratch.
+remain necessary with pnpm 12. Without `/Volumes/Scratch`, use manual setup:
+copy `.env.example`, replace its secret placeholders, set
+`STANDALONE_OWNER_EMAIL`, and choose private `DATA_DIR`, `WORK_DIR`, `BUILD_DIR`,
+cache and temporary paths explicitly. Configure an existing private S3-compatible
+bucket and its access settings. Skip both `setup-local.ts` and `local-s3.ts`,
+and start with `node --env-file=.env src/server.ts` after installing dependencies,
+starting the mail fixture and building with those paths. This alternative needs
+no Go installation; both helpers require Scratch.
 
 ### 3. Sign in
 
@@ -153,8 +159,10 @@ at `/seller` and open the emailed link in the browser that requested it. Email
 verification grants access to the existing `primary` workspace automatically. No
 `tenant-owner` command is needed.
 
-Configure a product and create a scoped automation key in the seller dashboard.
-The key is displayed once.
+Create an automation key in the seller dashboard and explicitly select
+`catalog:write`, `licenses:write` and `releases:write` for the walkthrough below.
+The key is displayed once. New keys default to `read` and `releases:write`;
+production CI keys should keep only the scopes each pipeline needs.
 
 > To test hosted onboarding, set `DEPLOYMENT_MODE=hosted` before starting the
 > app. Sellers create a workspace after sign-in and buyers use `/t/YOUR_SLUG`.
