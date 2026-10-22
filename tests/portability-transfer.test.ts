@@ -34,7 +34,7 @@ const sourceSecret = "1".repeat(64),
 async function fixture(t: TestContext) {
   await access("/Volumes/Scratch");
   const temporary =
-    process.env.TMPDIR ?? "/Volumes/Scratch/double-entitle-wp/tmp";
+    process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp";
   await mkdir(temporary, { recursive: true });
   const root = await mkdtemp(join(temporary, "portability-"));
   const source = await isolatedDatabase(`sqlite:${root}/source.sqlite`);

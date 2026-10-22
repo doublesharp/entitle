@@ -289,7 +289,7 @@ export async function buildApp(
     },
   };
   const reads = new ReadCache({
-    namespace: `${config.cacheNamespace ?? "double-entitle"}:${createHmac(
+    namespace: `${config.cacheNamespace ?? "entitle"}:${createHmac(
       "sha256",
       config.secret,
     )

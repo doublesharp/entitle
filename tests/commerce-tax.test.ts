@@ -13,7 +13,7 @@ for (const deploymentMode of ["standalone", "hosted"] as const)
   for (const uiMode of ["hosted", "elements"] as const)
     test(`seller tax settings govern ${deploymentMode} ${uiMode} Checkout requests`, async () => {
       const root = await mkdtemp(
-        "/Volumes/Scratch/double-entitle-wp/tmp/commerce-tax-",
+        "/Volumes/Scratch/entitle/tmp/commerce-tax-",
       );
       const fixture = await isolatedDatabase(`sqlite:${root}/db`),
         db = fixture.db;

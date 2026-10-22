@@ -194,14 +194,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET || !env.SMTP_HOST)
   )
     throw Error("Production requires Stripe and SMTP configuration");
-  const data = env.DATA_DIR ?? "/Volumes/Scratch/double-entitle-wp/data/local";
+  const data = env.DATA_DIR ?? "/Volumes/Scratch/entitle/data/local";
   const limits = z
     .object({
       CACHE_MEMORY_MIB: z.coerce.number().int().min(1).max(256).default(8),
       CACHE_NAMESPACE: z
         .string()
         .regex(/^[a-zA-Z0-9:_-]{1,64}$/)
-        .default("double-entitle"),
+        .default("entitle"),
       MAX_NATIVE_UPLOAD_MIB: z.coerce
         .number()
         .int()
@@ -395,7 +395,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     storage: resolve(env.WORK_DIR ?? `${data}/work`),
     staticDir: resolve(
       env.WEB_DIR ??
-        `${env.BUILD_DIR ?? "/Volumes/Scratch/double-entitle-wp/build/main"}/web`,
+        `${env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main"}/web`,
     ),
     port: ports.PORT,
     stripeSecret: env.STRIPE_SECRET_KEY ?? "sk_test_local",
@@ -439,7 +439,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     stripeLiveMode: env.STRIPE_LIVE_MODE === "true",
     platformPriceId: env.PLATFORM_STRIPE_PRICE_ID ?? "",
     s3: {
-      bucket: env.S3_BUCKET ?? "double-entitle-local",
+      bucket: env.S3_BUCKET ?? "entitle-local",
       region: env.S3_REGION ?? "us-east-1",
       ...(endpoint ? { endpoint } : {}),
       ...(env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY

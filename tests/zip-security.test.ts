@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { verifyZip } from "../src/releases.ts";
 import { zipBytes, type ZipEntry } from "./helpers/zip.ts";
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/zip-security-",
+  "/Volumes/Scratch/entitle/tmp/zip-security-",
 );
 after(() => rm(root, { recursive: true, force: true }));
 const plugin = {

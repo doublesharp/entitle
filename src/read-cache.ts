@@ -22,7 +22,7 @@ export class ReadCache {
   private warned = false;
   constructor(options: ReadCacheOptions = {}, engine?: ReadCacheEngine) {
     // Keep pre-0.2 writers out of the revised cache format during rolling upgrades.
-    this.namespace = `${options.namespace ?? `double-entitle:${randomUUID()}:`}adaptive-v2:`;
+    this.namespace = `${options.namespace ?? `entitle:${randomUUID()}:`}adaptive-v2:`;
     this.onUnavailable = options.onUnavailable;
     // An external backend must never supply executable feed/manifest bytes.
     if (engine || options.redisUrl)

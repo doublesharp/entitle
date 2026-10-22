@@ -9,7 +9,7 @@ site/device activation policy. Runtime APIs remain tenant-scoped.
 
 | Framework | Activation                           | Native update format                     | Example                                                     |
 | --------- | ------------------------------------ | ---------------------------------------- | ----------------------------------------------------------- |
-| WordPress | Site                                 | WordPress update metadata and plugin ZIP | [PHP plugin](../examples/wordpress/double-entitle-example/) |
+| WordPress | Site                                 | WordPress update metadata and plugin ZIP | [PHP plugin](../examples/wordpress/entitle-example/) |
 | Joomla    | Site                                 | Extension update XML and ZIP             | [Installer plugin](../examples/joomla/)                     |
 | Electron  | Device                               | Generic provider `latest*.yml`           | [JavaScript updater](../examples/electron/)                 |
 | Tauri     | Device                               | Dynamic JSON with detached signature     | [Rust updater](../examples/tauri/)                          |
@@ -93,21 +93,18 @@ activation, feed paths and protected package handling.
 ## Integration and qualification
 
 Server feed formatting, strict package checks, shared entitlement logic and client
-transport contracts have automated tests. In a recorded historical run,
-Joomla6.1.3/PHP8.5.11 installed a real 1.0.0-to-2.0.0 update, including package
-authentication/checksum and activation
-persistence through settings saves. In a separate recorded historical run, the
-Swift example passed typechecking against a real Sparkle2.9.1 framework.
-PHP/Java scope contracts execute with local runtimes;
-Rust has parser/format checks and Kotlin has not been compiled against an IDE SDK. Those tests do not prove
-native installation, OS signing, notarization, platform key storage or relaunch.
-See [verification](verification.md) for the current full-system and actual runtime
-results. Do not infer all-platform certification from API coverage.
+transport contracts have automated tests. Qualify actual package installation,
+platform signatures and restart behavior with your supported operating systems
+and framework versions. The Joomla qualification helper exercises a native
+library update; other extension types need their own installation checks.
+A Swift/Java/Kotlin typecheck or a native feed fixture does not establish a
+successful signed application update. Follow the [release checks](testing.md#release-checks)
+for the integration you intend to ship.
 
-Official references checked2026-10-21:
+Protocol references:
 
 - Joomla [update servers](https://manual.joomla.org/docs/building-extensions/install-update/update-server/), [plugin examples](https://manual.joomla.org/docs/building-extensions/plugins/plugin-examples/) and [installer events](https://manual.joomla.org/docs/5.4/building-extensions/plugins/plugin-events/installer/).
 - JetBrains [custom repositories and authentication](https://plugins.jetbrains.com/docs/intellij/custom-plugin-repository.html) and [plugin template](https://github.com/JetBrains/intellij-platform-plugin-template).
 - Tauri [updater](https://v2.tauri.app/plugin/updater/) and [project generator](https://v2.tauri.app/start/create-project/).
-- Electron [stable v26 generic updater](https://www.electron.build/v26/docs/features/auto-update/) and [Forge templates](https://www.electronforge.io/). Unversioned builder docs currently describe unreleasedv27.
+- Electron [stable v26 generic updater](https://www.electron.build/v26/docs/features/auto-update/) and [Forge templates](https://www.electronforge.io/). Use the documentation matching your installed builder version.
 - Sparkle [setup, signing and appcast guide](https://sparkle-project.org/documentation/).

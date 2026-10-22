@@ -6,7 +6,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 
 test("migration007 defaults legacy products to WordPress and enforces tenant-scoped immutable asset targets", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/framework-schema-",
+    "/Volumes/Scratch/entitle/tmp/framework-schema-",
   );
   const fixture = await isolatedDatabase(`sqlite:${root}/db`);
   const { db } = fixture;
@@ -170,7 +170,7 @@ test(
   },
   async () => {
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/framework-recovery-",
+      "/Volumes/Scratch/entitle/tmp/framework-recovery-",
     );
     const fixture = await isolatedDatabase(
       `sqlite:${root}/db`,
@@ -241,7 +241,7 @@ test(
 
 test("migration007 preserves populated legacy product and installation records", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/framework-upgrade-",
+    "/Volumes/Scratch/entitle/tmp/framework-upgrade-",
   );
   const fixture = await isolatedDatabase(`sqlite:${root}/db`);
   const { db } = fixture;

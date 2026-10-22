@@ -254,7 +254,7 @@ test(
       bucket: sourceBucket,
     });
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/backup-restore-",
+      "/Volumes/Scratch/entitle/tmp/backup-restore-",
     );
     const originalDirectory = `${root}/original-db`,
       backup = `${root}/backup`,

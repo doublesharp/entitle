@@ -14,7 +14,7 @@ import {isolatedDatabase} from "./helpers/database.ts";
 
 const secret = "13".repeat(32);
 async function fixture(run: (db: DB, a: Tenant, b: Tenant) => Promise<void>) {
-  const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/tenant-business-");
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/tenant-business-");
   const {db,close}=await isolatedDatabase(`sqlite:${root}/db`);
   try {
     await migrate(db);

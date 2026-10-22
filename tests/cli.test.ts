@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { runCli } from "../src/cli.ts";
 const directory = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/saas-cli-",
+  "/Volumes/Scratch/entitle/tmp/saas-cli-",
 );
 const calls: {
   path: string;

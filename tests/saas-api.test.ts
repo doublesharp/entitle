@@ -29,7 +29,7 @@ async function fixture(
   maxBytes = 25 * 1024 * 1024,
 ) {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-api-",
+    "/Volumes/Scratch/entitle/tmp/saas-api-",
   );
   const config = loadConfig({
     DEPLOYMENT_MODE: "hosted",

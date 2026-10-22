@@ -16,7 +16,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 process.env.NODE_ENV = "test";
 async function fixture(t: TestContext, override: Partial<Config> = {}) {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/features-api-",
+    "/Volumes/Scratch/entitle/tmp/features-api-",
   );
   const config = {
     ...loadConfig({

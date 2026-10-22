@@ -8,7 +8,7 @@ import { InMemoryArtifactStore } from "../src/storage.ts";
 import { zipBytes } from "./helpers/zip.ts";
 
 test("concurrent publication reserves tenant storage and keeps private immutable S3 objects", async () => {
-  const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/tenant-publication-");
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/tenant-publication-");
   const db = createDb(`sqlite:${root}/db`), store = new InMemoryArtifactStore();
   try {
     await migrate(db);

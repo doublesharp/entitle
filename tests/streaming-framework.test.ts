@@ -14,7 +14,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 import { primaryTenant } from "./helpers/tenant.ts";
 async function fixture(t: import("node:test").TestContext, streaming = true) {
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/streaming-framework-",
+    "/Volumes/Scratch/entitle/tmp/streaming-framework-",
   );
   const fixture = await isolatedDatabase("sqlite:" + directory + "/db");
   const { db } = fixture;

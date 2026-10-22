@@ -7,7 +7,7 @@ import { Billing, type BillingSnapshot } from "../src/billing.ts";
 import { Licenses } from "../src/licensing.ts";
 import { primaryTenant } from "./helpers/tenant.ts";
 const directory = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/saas-billing-review-",
+  "/Volumes/Scratch/entitle/tmp/saas-billing-review-",
 );
 const database = await isolatedDatabase(`sqlite:${directory}/db`);
 const db = database.db;

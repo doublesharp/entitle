@@ -11,7 +11,7 @@ import { InMemoryArtifactStore } from "../src/storage.ts";
 import { Releases } from "../src/releases.ts";
 import { Outbox } from "../src/email.ts";
 
-const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/core-");
+const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/core-");
 const db = createDb(
   process.env.TEST_DATABASE_URL ?? `sqlite:${root}/db.sqlite`,
 );

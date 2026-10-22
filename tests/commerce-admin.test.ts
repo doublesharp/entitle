@@ -18,7 +18,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 for (const deploymentMode of ["standalone", "hosted"] as const)
   test(`${deploymentMode} commerce admin requires interactive tenant auth and CSRF, validates settings and isolates products`, async () => {
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/commerce-admin-",
+      "/Volumes/Scratch/entitle/tmp/commerce-admin-",
     );
     const fixture = await isolatedDatabase(`sqlite:${root}/db`),
       db = fixture.db;

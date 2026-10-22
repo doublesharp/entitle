@@ -38,11 +38,11 @@ final class LicenseUpdates: NSObject, SPUUpdaterDelegate {
     }
     /// Build a displayable error without including request headers or provider responses.
     private func error(_ message: String = "Update request failed. Check your license or try again later.") -> NSError {
-        NSError(domain: "DoubleEntitle", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        NSError(domain: "Entitle", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
     /// Reuse a random UUID scoped to this API/product, including after deactivation.
     private var installationId: String {
-        let key = "DoubleEntitle.\(api.absoluteString).\(product).installationId"
+        let key = "Entitle.\(api.absoluteString).\(product).installationId"
         if let existing = defaults.string(forKey: key) { return existing }
         let value = UUID().uuidString.lowercased(); defaults.set(value, forKey: key)
         return value

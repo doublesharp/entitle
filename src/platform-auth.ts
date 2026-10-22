@@ -114,7 +114,7 @@ export class PlatformAuth {
             to: email,
             subject: `Sign in to ${site.name}`,
             text: `Open ${this.config.origin}/seller#seller-login=${token}\n\nConfirm sign-in in the same browser that requested this email. Use your latest requested link. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
-            messageId: `<${id}@double-entitle>`,
+            messageId: `<${id}@entitle>`,
           },
           this.config.secret,
         ),

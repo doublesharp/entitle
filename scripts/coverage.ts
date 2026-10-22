@@ -4,7 +4,7 @@ import { resolve, join } from "node:path";
 import { coverageFailures, type CoverageSummary } from "./coverage-gate.ts";
 
 const root = process.cwd();
-const scratch = "/Volumes/Scratch/double-entitle-wp";
+const scratch = "/Volumes/Scratch/entitle";
 await access("/Volumes/Scratch");
 const output = resolve(
   process.env.COVERAGE_DIR ?? `${scratch}/reports/coverage`,

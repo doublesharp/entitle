@@ -20,7 +20,7 @@ import type { Message } from "../src/email.ts";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/seller-auth-",
+  "/Volumes/Scratch/entitle/tmp/seller-auth-",
 );
 const db = createDb(`sqlite:${root}/db.sqlite`);
 const config = loadConfig({ DEPLOYMENT_MODE: "hosted",
@@ -528,7 +528,7 @@ test("tenant quota is serialized, trials cannot be restarted and reserved platfo
     "stripe",
     "wordpress",
     "support",
-    "double-entitle",
+    "entitle",
   ])
     await assert.rejects(tenants.create(owner.seller, { slug, name: slug }), {
       code: "reserved_tenant",

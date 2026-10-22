@@ -37,7 +37,7 @@ async function fixture(
   providedStore?: import("../src/storage.ts").ArtifactStore,
 ) {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/framework-api-",
+    "/Volumes/Scratch/entitle/tmp/framework-api-",
   );
   const config = loadConfig({
     DEPLOYMENT_MODE: "hosted",
@@ -1679,7 +1679,7 @@ test("startup rejects insufficient publication disk budgets and work paths insid
   });
   await assert.rejects(
     fixture(t, {
-      storage: "/Volumes/Scratch/double-entitle-wp/build/main/web/private",
+      storage: "/Volumes/Scratch/entitle/build/main/web/private",
     }),
     { code: "storage_configuration" },
   );

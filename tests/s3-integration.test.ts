@@ -60,7 +60,7 @@ test(
       timeoutMs: 3000,
     });
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/s3-integration-",
+      "/Volumes/Scratch/entitle/tmp/s3-integration-",
     );
     const tenant = randomUUID(),
       other = randomUUID(),

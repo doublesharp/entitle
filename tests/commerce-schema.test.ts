@@ -6,7 +6,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 
 test("commerce migration defaults tax off, isolates durable grants and resumes forward only", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/commerce-schema-",
+    "/Volumes/Scratch/entitle/tmp/commerce-schema-",
   );
   const fixture = await isolatedDatabase(`sqlite:${root}/db`);
   try {
@@ -65,7 +65,7 @@ for (const [engine, variable] of [
       const previous = process.env.TEST_SAAS_DATABASE_URL;
       process.env.TEST_SAAS_DATABASE_URL = process.env[variable];
       const root = await mkdtemp(
-        "/Volumes/Scratch/double-entitle-wp/tmp/commerce-engine-",
+        "/Volumes/Scratch/entitle/tmp/commerce-engine-",
       );
       const fixture = await isolatedDatabase(`sqlite:${root}/db`),
         db = fixture.db;
@@ -177,7 +177,7 @@ for (const [engine, variable] of [
 
 test("migration013 persists mode-scoped tenant price history without guessing legacy modes", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/commerce-history-",
+    "/Volumes/Scratch/entitle/tmp/commerce-history-",
   );
   const fixture = await isolatedDatabase(`sqlite:${root}/db`),
     db = fixture.db;

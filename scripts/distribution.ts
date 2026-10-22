@@ -16,9 +16,9 @@ import { spawnSync } from "node:child_process";
 /** Maintainer check only. Packaging still reads the explicit manifest. */
 export async function sourceFiles(root: string): Promise<string[]> {
   const files: string[] = [];
-  const roots = ["ADDITIONAL-PERMISSION.md", "LICENSE", "NOTICE", "README.md", "CONTRIBUTING.md",
+  const roots = ["ADDITIONAL-PERMISSION.md", "LICENSE", "NOTICE", "README.md", ".github/CONTRIBUTING.md",
     "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json", "eslint.config.js",
-    "Dockerfile", "compose.yaml", "compose.test.yaml", ".env.example", ".node-version", ".gitignore", ".dockerignore"];
+    "Dockerfile", ".env.example", ".node-version", ".gitignore", ".dockerignore"];
   const walk = async (directory: string) => {
     for (const entry of await readdir(join(root, directory), { withFileTypes: true })) {
       if (entry.name.startsWith(".") || ["node_modules", "reports", "data", "cache", "dist", "coverage"].includes(entry.name)) continue;
@@ -42,15 +42,13 @@ export async function packageSource(root: string, webOutput: string) {
     "LICENSE",
     "NOTICE",
     "README.md",
-    "CONTRIBUTING.md",
+    ".github/CONTRIBUTING.md",
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "tsconfig.json",
     "eslint.config.js",
     "Dockerfile",
-    "compose.yaml",
-    "compose.test.yaml",
     ".env.example",
     ".node-version",
     ".gitignore",

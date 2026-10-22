@@ -12,7 +12,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 import type { SellerSession } from "../src/platform-auth.ts";
 
 const root = await mkdtemp(
-  `${process.env.TMPDIR ?? "/Volumes/Scratch/double-entitle-wp/tmp"}/commerce-billing-`,
+  `${process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp"}/commerce-billing-`,
 );
 const fixture = await isolatedDatabase(`sqlite:${root}/db`),
   db = fixture.db;

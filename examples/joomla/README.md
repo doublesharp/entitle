@@ -13,13 +13,13 @@ Add this to the licensed extension's manifest, with your publisher/product:
 
 From your existing administrator settings controller, require Joomla's CSRF token
 and `core.manage` permission, serialize license changes, then obtain the enabled
-plugin with `$app->bootPlugin('doubleentitle', 'installer')`. Call
+plugin with `$app->bootPlugin('entitle', 'installer')`. Call
 `$plugin->activate($keyFromForm)`, `$plugin->status()` or `$plugin->deactivate()`.
 Catch RuntimeException and display its fixed message. Never echo raw HTTP errors,
 log headers or retain the key. Clear the form key after the request.
 
 The UUID and token persist in this installer plugin row's `custom_data` JSON
-under the reserved `double_entitle` object, as `installation_id` and
+under the reserved `entitle` object, as `installation_id` and
 `activation_token`. Form-managed `params` contains only API/product settings, so
 saving the plugin configuration cannot erase the activation. Unknown custom data
 keys are preserved; non-object or malformed existing custom data is left

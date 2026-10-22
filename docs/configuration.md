@@ -33,17 +33,17 @@ delete records to bypass the guard. An isolated sandbox child is supported.
 
 | Variable               | Default                                         | Purpose                                                                                                                       |
 | ---------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `DATA_DIR`             | `/Volumes/Scratch/double-entitle-wp/data/local` | Base for default SQLite and work paths. Set explicitly outside local macOS development.                                       |
+| `DATA_DIR`             | `/Volumes/Scratch/entitle/data/local` | Base for default SQLite and work paths. Set explicitly outside local macOS development.                                       |
 | `DATABASE_URL`         | `sqlite:DATA_DIR/entitle.sqlite`                | SQLite, PostgreSQL or MySQL connection. Use a persistent private database.                                                    |
 | `WORK_DIR`             | `DATA_DIR/work`                                 | Private artifact spools, verified cache and export work; must be outside public static files.                                 |
-| `BUILD_DIR`            | `/Volumes/Scratch/double-entitle-wp/build/main` | Build output and fallback base for built web assets.                                                                          |
+| `BUILD_DIR`            | `/Volumes/Scratch/entitle/build/main` | Build output and fallback base for built web assets.                                                                          |
 | `WEB_DIR`              | `BUILD_DIR/web`                                 | Static frontend directory served by the app.                                                                                  |
 | `ENTITLE_DATA_DIR`     | Required by Compose interpolation               | Host persistent volume path; Compose setting, not a `loadConfig` variable.                                                    |
 | `ENTITLE_MEMORY_LIMIT` | `768m`                                          | Compose application container memory limit; reserve enough for Node/database overhead as well as configured transfer buffers. |
 
 The Docker deployment uses `DATA_DIR=/data`, `WORK_DIR=/data/work`,
 `WEB_DIR=/app/dist/web` and a writable host volume owned by UID/GID 1000.
-Inspect [compose.yaml](../compose.yaml) before selecting its subnet and paths.
+Inspect [compose.yaml](../deploy/compose.yaml) before selecting its subnet and paths.
 Reserve enough filesystem capacity for publication, downloads, exports and the
 database together. Per-process reservations are not filesystem quotas.
 
@@ -82,7 +82,7 @@ fails validation. Fixture sandboxes need no Stripe test keys.
 
 | Variable               | Default                | Constraint / purpose                                                                   |
 | ---------------------- | ---------------------- | -------------------------------------------------------------------------------------- |
-| `S3_BUCKET`            | `double-entitle-local` | Explicitly required in production. Keep bucket and objects private.                    |
+| `S3_BUCKET`            | `entitle-local` | Explicitly required in production. Keep bucket and objects private.                    |
 | `S3_REGION`            | `us-east-1`            | Explicitly required in production.                                                     |
 | `S3_ENDPOINT`          | Omitted                | Custom HTTP(S) endpoint without credentials/query/fragment. Production requires HTTPS. |
 | `S3_ACCESS_KEY_ID`     | Omitted                | Supply together with secret, or use the SDK credential chain.                          |
@@ -172,7 +172,7 @@ hits still authorize every request. See [deployment transfer details](deployment
 | ------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------- |
 | `CACHE_REDIS_URL`        | Omitted          | `redis://` or `rediss://`, no query/fragment; only price-picker cache uses Redis.                               |
 | `CACHE_MEMORY_MIB`       | `8`              | 1-256 MiB bounded presentation cache.                                                                           |
-| `CACHE_NAMESPACE`        | `double-entitle` | 1-64 alphanumeric, colon, underscore or hyphen characters. Separate deployments should use distinct namespaces. |
+| `CACHE_NAMESPACE`        | `entitle` | 1-64 alphanumeric, colon, underscore or hyphen characters. Separate deployments should use distinct namespaces. |
 | `OUTBOUND_WEBHOOK_HOSTS` | Omitted          | Optional restriction. When set, only these exact public DNS names are accepted, comma-separated; no wildcards or private-address bypass.        |
 
 Presentation caching never supplies entitlement. Feed formatting stays in trusted
@@ -184,5 +184,5 @@ failure falls back to source operations. No Redis service is required.
 `TENANT_SLUG`, `TENANT_API_KEY` and `OPERATOR_ORIGIN` configure remote
 [CLI calls](cli.md). `TMPDIR` and pnpm's explicit store paths keep disposable
 output on Scratch. `GO_BINARY` selects Go for the local S3 helper. `TEST_*` and
-integration variables belong to isolated [verification](verification.md), not
+integration variables belong to isolated [verification](testing.md#release-checks), not
 production service configuration.

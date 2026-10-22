@@ -14,7 +14,7 @@ import { StripeBilling } from "../src/stripe.ts";
 import { loadConfig } from "../src/config.ts";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/review-billing-",
+  "/Volumes/Scratch/entitle/tmp/review-billing-",
 );
 const db = createDb(process.env.TEST_DATABASE_URL ?? `sqlite:${root}/db`);
 const secret = "74".repeat(32);

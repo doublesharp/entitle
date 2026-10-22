@@ -26,7 +26,7 @@ const options = {
 };
 async function files(t: import("node:test").TestContext) {
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/streaming-s3-",
+    "/Volumes/Scratch/entitle/tmp/streaming-s3-",
   );
   t.after(() => rm(directory, { recursive: true, force: true }));
   const file = directory + "/source";

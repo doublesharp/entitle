@@ -89,8 +89,8 @@ namespace Joomla\CMS\Event\Installer {
 }
 namespace {
     define('_JEXEC', 1);
-    require __DIR__ . '/../examples/joomla/src/Extension/DoubleEntitle.php';
-    use DoubleEntitle\Plugin\Installer\DoubleEntitle\Extension\DoubleEntitle;
+    require __DIR__ . '/../examples/joomla/src/Extension/Entitle.php';
+    use Entitle\Plugin\Installer\Entitle\Extension\Entitle;
     use Joomla\CMS\Event\Installer\BeforePackageDownloadEvent;
     use Joomla\CMS\Event\Installer\BeforeUpdateSiteDownloadEvent;
     use Joomla\CMS\Factory;
@@ -102,41 +102,41 @@ namespace {
     $db = new \Joomla\Database\TestDatabase(); Factory::$db = $db;
     $opaque = ['unknown_owner' => ['apostrophe' => "don't touch", 'nested' => [1, null, false, (object) ['anything' => 'retained']]]];
     $db->row = (object) ['params' => json_encode($params), 'custom_data' => json_encode($opaque)];
-    $plugin = new DoubleEntitle($params);
+    $plugin = new Entitle($params);
     $plugin->activate('license-key');
     $identity = $plugin->installationId();
     $plugin->activate('license-key');
     check($plugin->installationId() === $identity, 'Repeated activation changed identity');
     // Joomla filters params against form fields, then replaces the entire params column.
     $db->row->params = json_encode($params);
-    $plugin = new DoubleEntitle(json_decode($db->row->params, true));
+    $plugin = new Entitle(json_decode($db->row->params, true));
     check($plugin->installationId() === $identity, 'Saving plugin settings changed the stable installation UUID');
     check($plugin->status()['entitled'] === true, 'Saving plugin settings lost the activation token');
     $custom = json_decode($db->row->custom_data, true);
     check($custom['unknown_owner'] === json_decode(json_encode($opaque['unknown_owner']), true), 'Opaque custom_data was modified');
-    check(count(DoubleEntitle::getSubscribedEvents()) === 2);
+    check(count(Entitle::getSubscribedEvents()) === 2);
     foreach ([new BeforeUpdateSiteDownloadEvent($feed, ['Accept' => 'application/xml']), new BeforePackageDownloadEvent($asset, ['Accept' => 'application/zip'])] as $event) {
         $plugin->headers($event);
         check($event->getHeaders()['Authorization'] === 'Bearer activation_token'); check(isset($event->getHeaders()['Accept']));
     }
     foreach ([str_replace('updates.example', 'attacker.example', $asset), str_replace('/example/', '/another/', $asset), $feed . '?token=bad', $asset . '#part', str_replace('https:', 'http:', $asset), str_replace('https://', 'https://user:pass@', $asset), str_replace('updates.example', 'updates.example:444', $asset), $api . '/seller/products', $api . '/packages/example/assets/../asset/example.zip', $api . '/packages/example-other/assets/a/file.zip'] as $url) {
-        check(!DoubleEntitle::permits($api, 'example', $url));
+        check(!Entitle::permits($api, 'example', $url));
         $event = new BeforePackageDownloadEvent($url, ['Original' => 'retained']); $plugin->headers($event); check($event->getHeaders() === ['Original' => 'retained']);
     }
     $plugin->deactivate();
     check($plugin->installationId() === $identity, 'Deactivation changed the stable installation UUID');
     $event = new BeforeUpdateSiteDownloadEvent($feed, []); $plugin->headers($event); check($event->getHeaders() === [], 'Deactivation retained authentication headers');
     $custom = json_decode($db->row->custom_data, true);
-    check($custom['double_entitle']['activation_token'] === '', 'Deactivation did not clear the stored token');
+    check($custom['entitle']['activation_token'] === '', 'Deactivation did not clear the stored token');
     check(json_decode($db->row->params, true) === $params, 'State writes modified form-managed params');
     // Existing prototype params migrate without changing the licensed identity.
     $db->row->custom_data = json_encode($opaque);
-    $legacy = new DoubleEntitle($params + ['installation_id' => $identity, 'activation_token' => 'activation_token']);
+    $legacy = new Entitle($params + ['installation_id' => $identity, 'activation_token' => 'activation_token']);
     check($legacy->installationId() === $identity);
-    check(json_decode($db->row->custom_data, true)['double_entitle']['activation_token'] === 'activation_token', 'Legacy params were not migrated');
+    check(json_decode($db->row->custom_data, true)['entitle']['activation_token'] === 'activation_token', 'Legacy params were not migrated');
     // A non-JSON opaque value must survive untouched, rather than being replaced.
     $db->row->custom_data = 'opaque data owned by an existing integration';
-    try { (new DoubleEntitle($params))->installationId(); throw new \LogicException('Malformed custom_data was accepted'); }
+    try { (new Entitle($params))->installationId(); throw new \LogicException('Malformed custom_data was accepted'); }
     catch (\RuntimeException $expected) { check($db->row->custom_data === 'opaque data owned by an existing integration'); }
     echo "Joomla scoped feed/package and settings persistence contracts passed\n";
 }

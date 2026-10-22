@@ -18,7 +18,7 @@ import { Billing } from "../src/billing.ts";
 import { Licenses } from "../src/licensing.ts";
 import { PlatformBilling } from "../src/platform-billing.ts";
 const directory = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/saas-stripe-",
+  "/Volumes/Scratch/entitle/tmp/saas-stripe-",
 );
 const database = await isolatedDatabase(`sqlite:${directory}/db`);
 const db = database.db;

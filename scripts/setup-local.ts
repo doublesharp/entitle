@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
 await access("/Volumes/Scratch");
-const root = "/Volumes/Scratch/double-entitle-wp";
+const root = "/Volumes/Scratch/entitle";
 await mkdir(`${root}/data/local`, { recursive: true });
 await writeFile(
   ".npmrc",

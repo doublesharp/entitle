@@ -1,5 +1,5 @@
 <?php
-/** Plugin Name: Double Entitle local integration transport */
+/** Plugin Name: Doublesharp Entitle local integration transport */
 // Docker fixture only: permit this one loopback origin through WP's SSRF checks.
 add_filter('http_request_host_is_external', function ($external, $host, $url) {
     $parts = wp_parse_url($url);

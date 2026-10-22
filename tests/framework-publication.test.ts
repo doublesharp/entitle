@@ -10,7 +10,7 @@ import { primaryTenant } from "./helpers/tenant.ts";
 import { zipBytes, type ZipEntry } from "./helpers/zip.ts";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/framework-publication-",
+  "/Volumes/Scratch/entitle/tmp/framework-publication-",
 );
 const fixture = await isolatedDatabase(`sqlite:${root}/db`);
 const { db } = fixture;

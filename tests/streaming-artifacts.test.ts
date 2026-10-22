@@ -23,11 +23,11 @@ const identity = { tenantId: "primary", id: "a", checksum, size: bytes.length };
 async function fixture(t: import("node:test").TestContext, options = {}) {
   await access("/Volumes/Scratch");
   await mkdir(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r2-fixes/artifacts-portability",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r2-fixes/artifacts-portability",
     { recursive: true },
   );
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r2-fixes/artifacts-portability/streaming-",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r2-fixes/artifacts-portability/streaming-",
   );
   const cache = new VerifiedArtifactCache({
     directory,
@@ -114,7 +114,7 @@ test("cache rejects overflow configuration and unsafe identities and ranges", as
     assert.throws(
       () =>
         new VerifiedArtifactCache({
-          directory: "/Volumes/Scratch/double-entitle-wp/tmp/never-created",
+          directory: "/Volumes/Scratch/entitle/tmp/never-created",
           maxBytes: 100,
           maxInflightBytes: 100,
           ...options,
@@ -563,11 +563,11 @@ test("source descriptor failures reach the response stream and release its lease
 test("retired generation unlink failure preserves quota and is never released twice", async (t) => {
   await access("/Volumes/Scratch");
   await mkdir(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r2-fixes/artifacts-portability",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r2-fixes/artifacts-portability",
     { recursive: true },
   );
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r2-fixes/artifacts-portability/streaming-unlink-",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r2-fixes/artifacts-portability/streaming-unlink-",
   );
   const cache = new VerifiedArtifactCache({
     directory,

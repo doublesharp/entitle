@@ -30,7 +30,7 @@ const reservedSlugs = new Set([
   "stripe",
   "wordpress",
   "support",
-  "double-entitle",
+  "entitle",
 ]);
 
 export type TenantOperation = "capacity" | "buyer" | "recovery" | "reconcile";

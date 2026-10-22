@@ -4,7 +4,7 @@ The hosted default is 1% per subscription invoice, with no fixed application
 fee, in addition to the existing platform subscription and the seller's own
 Stripe fees. Standalone collects no application fee and needs no subscription
 to Doublesharp. The platform subscription price still comes from
-PLATFORM_STRIPE_PRICE_ID; this change does not invent or publish a monthly price.
+PLATFORM_STRIPE_PRICE_ID; review the configured amount at checkout.
 
 ## Hosted and self-hosted costs
 
@@ -19,33 +19,9 @@ PLATFORM_STRIPE_PRICE_ID; this change does not invent or publish a monthly price
 Both versions use the publisher's Stripe account for buyer payments and provide
 the same core licensing/update workflows. Self-hosting avoids platform charges;
 it does not remove provider costs or operating work. The planned hosted address
-and self-hosting entry points are in [README](../README.md#hosted-or-self-hosted).
+and self-hosting entry points are in [README](../README.md#choose-how-to-run-it).
 See [deployment](deployment.md) for the two setup paths and licensing boundary.
 This page does not establish a public launch, fixed subscription price or SLA.
-
-## Basis for the rate
-
-Pricing checked on 2026-10-21: [Freemius](https://freemius.com/pricing/) lists
-3.8% + $0.50 plus gateway fees, with an additional 2.3% for its WordPress
-solution. [Lemon Squeezy](https://www.lemonsqueezy.com/pricing) lists a base
-5% + $0.50 including processing and merchant-of-record services, with possible
-additional fees. Their merchant-of-record services include tax/compliance
-responsibilities that Entitle does not assume. Do not present these as
-equivalent services or claim Entitle is always cheapest.
-
-Standard connected accounts using direct charges pay their Stripe processing,
-Billing and other service fees. Stripe's account-paid configuration currently
-has no additional Connect account/payout fees according to
-[Stripe's fee responsibility documentation](https://docs.stripe.com/connect/direct-charges-fee-payer-behavior).
-Confirm that responsibility on actual connected accounts before launching.
-
-Our 1% is revenue toward storage, download egress, database/compute, email,
-backups, support and engineering. Illustrative revenue before our operating
-costs is $0.20 on a $20 invoice, $1 on $100, or $100 on $10,000 sales volume.
-These are arithmetic examples, not measured costs or profit forecasts. A
-seller's low sales can coexist with heavy download/support usage; retain the
-platform subscription and bounded storage/product allowances. Measure paid
-storage, bytes served, requests, email and support costs before expanding them.
 
 ## Configuration and behavior
 
@@ -71,18 +47,17 @@ The hosted dashboard discloses the configured rate and separate Stripe charges.
 
 ## Refunds and reporting
 
-Application fees are retained on refunds by default in this version. Do not
+Application fees are retained on refunds by default unless the operator explicitly refunds them. Do not
 promise an automatic fee refund. For a refund initiated through Stripe, an
 operator may separately refund the application fee through the platform Stripe
-Dashboard/API. Reconcile that action in Stripe; this change does not introduce
+Dashboard/API. Reconcile that action in Stripe; there is no
 automatic fee-refund execution or a fee-refund retry queue. See
 [Stripe direct charge refunds](https://docs.stripe.com/connect/direct-charges?platform=web&ui=stripe-hosted#refunds).
 
 Actual application fees and their refunds are available in Stripe's Collected
 fees view. Entitle's existing payment metrics remain gross paid/refunded
 invoice amounts grouped by currency, not seller net proceeds or platform profit.
-No live charges, bank payouts or cost/profitability acceptance are claimed by
-local fixture verification.
+Use Stripe reports for settlement and fee accounting; application metrics are operational counters.
 
 ## Hosted Starter and monthly Pro
 
@@ -135,8 +110,7 @@ Classic/manual credits without Stripe `credited_items` attribution cannot safely
 identify the original grant. The platform enforces its safe Portal policy in
 code and refuses a changed configuration; it never falls back to the account's
 default Portal. Operator-created immediate unlinked-credit downgrades remain
-unsupported. Local canonical-provider fixtures test accounting and idempotency;
-real Stripe test-account Portal qualification is still required before release.
+unsupported. Qualify the configured Portal in Stripe test mode before enabling real payments.
 See [Stripe prorations](https://docs.stripe.com/billing/subscriptions/prorations).
 
 Customer-balance settlement identifies the receiving invoice, not the entire

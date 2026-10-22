@@ -1,3 +1,4 @@
+import { site } from "./site.ts";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -179,9 +180,9 @@ export class AccountManagement {
       payload: seal(
         {
           to,
-          subject: "Confirm your Double Entitle account action",
+          subject: `Confirm your ${site.name} account action`,
           text,
-          messageId: `<${id}@double-entitle>`,
+          messageId: `<${id}@entitle>`,
         },
         this.auth.config.secret,
       ),
@@ -455,7 +456,7 @@ export class AccountManagement {
         tx,
         "account_email_new",
         address,
-        `Verify your new Double Entitle email address in the same signed-in browser: ${this.auth.config.origin}/seller#account-email-change=${id}&token=${newToken}\nBoth addresses must approve within 15 minutes.`,
+        `Verify your new ${site.name} email address in the same signed-in browser: ${this.auth.config.origin}/seller#account-email-change=${id}&token=${newToken}\nBoth addresses must approve within 15 minutes.`,
       );
       await audit(tx, s.user.id, "seller.email_change.requested");
       return { id, expiresIn: 900 };

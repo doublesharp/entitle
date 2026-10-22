@@ -39,13 +39,13 @@ class LicenseUpdates {
         /** Return whether [url] may receive this tenant/product's activation token. */
         fun permits(url: String): Boolean = UpdateScope.permits(API, PRODUCT, url)
     }
-    private val credentials = CredentialAttributes("DoubleEntitle:$API:$PRODUCT")
+    private val credentials = CredentialAttributes("Entitle:$API:$PRODUCT")
     private val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
         .connectTimeout(Duration.ofSeconds(20)).build()
     /** Create the installation UUID once under a lock; retain it after deactivation. */
     private val installationId: String get() = synchronized(identityLock) {
         val properties = PropertiesComponent.getInstance()
-        val name = "DoubleEntitle:$API:$PRODUCT:installationId"
+        val name = "Entitle:$API:$PRODUCT:installationId"
         properties.getValue(name) ?: UUID.randomUUID().toString().also { properties.setValue(name, it) }
     }
     /** Read the activation credential, or return null if no token is stored. */

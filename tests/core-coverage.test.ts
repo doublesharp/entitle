@@ -7,7 +7,7 @@ import { Billing, type BillingSnapshot } from "../src/billing.ts";
 import { Licenses, normalizeSite } from "../src/licensing.ts";
 import { hash } from "../src/crypto.ts";
 import { Outbox } from "../src/email.ts";
-const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/core-edge-");
+const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/core-edge-");
 const db = createDb(process.env.TEST_DATABASE_URL ?? `sqlite:${root}/db`);
 const secret = "45".repeat(32);
 const licensing = new Licenses(db, secret, [], primaryTenant);

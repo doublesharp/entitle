@@ -23,7 +23,7 @@ const approval = {
 } as const;
 async function fixture(t: test.TestContext) {
   const temporary =
-    process.env.TMPDIR ?? "/Volumes/Scratch/double-entitle-wp/tmp";
+    process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp";
   await mkdir(temporary, { recursive: true });
   const path = await mkdtemp(join(temporary, "billing-privacy-"));
   const database = await isolatedDatabase(`sqlite:${path}/db`),

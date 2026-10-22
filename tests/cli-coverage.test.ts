@@ -8,7 +8,7 @@ import { createDb } from "../src/db.ts";
 import { runCli } from "../src/cli.ts";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/cli-coverage-",
+  "/Volumes/Scratch/entitle/tmp/cli-coverage-",
 );
 const calls: {
   method: string;

@@ -20,7 +20,7 @@ assert.equal(
   "Set QUALIFY_JOOMLA=1 to run the isolated native fixture.",
 );
 process.env.NODE_ENV = "test";
-const scratch = "/Volumes/Scratch/double-entitle-wp";
+const scratch = "/Volumes/Scratch/entitle";
 const root = resolve(
   process.env.JOOMLA_FIXTURE_ROOT ?? `${scratch}/tmp/joomla-native-20261021`,
 );
@@ -170,7 +170,7 @@ try {
       join(siteRoot, "installation/joomla.php"),
       "install",
       "--no-interaction",
-      "--site-name=Double Entitle native fixture",
+      "--site-name=Doublesharp Entitle native fixture",
       "--admin-user=Fixture administrator",
       "--admin-username=fixtureadmin",
       `--admin-password=${secrets.adminPassword}`,
@@ -234,7 +234,7 @@ try {
       framework: "joomla",
       frameworkConfig: {
         extensionType: "library",
-        element: "doubleentitlefixture",
+        element: "entitlefixture",
         client: "site",
         joomlaMajor: 6,
       },
@@ -272,8 +272,8 @@ try {
     const dir = join(root, `library-${version}`);
     await mkdir(join(dir, "src"), { recursive: true });
     await writeFile(
-      join(dir, "doubleentitlefixture.xml"),
-      `<?xml version="1.0"?><extension type="library" method="upgrade"><name>Double Entitle fixture</name><libraryname>doubleentitlefixture</libraryname><version>${version}</version><files><folder>src</folder></files><updateservers><server type="collection" priority="1" name="Fixture updates">${feed}</server></updateservers></extension>`,
+      join(dir, "entitlefixture.xml"),
+      `<?xml version="1.0"?><extension type="library" method="upgrade"><name>Doublesharp Entitle fixture</name><libraryname>entitlefixture</libraryname><version>${version}</version><files><folder>src</folder></files><updateservers><server type="collection" priority="1" name="Fixture updates">${feed}</server></updateservers></extension>`,
     );
     await writeFile(join(dir, "src/version.txt"), version);
     await writeFile(join(dir, "src/fixture.php"), `<?php return '${version}';`);
@@ -372,9 +372,9 @@ try {
     "src/framework-api.ts",
     "src/update-adapters.ts",
     "src/frameworks.ts",
-    "examples/joomla/src/Extension/DoubleEntitle.php",
+    "examples/joomla/src/Extension/Entitle.php",
     "examples/joomla/services/provider.php",
-    "examples/joomla/doubleentitle.xml",
+    "examples/joomla/entitle.xml",
   ])
     sourceHashes[file] = createHash("sha256")
       .update(await readFile(resolve(file)))
@@ -491,23 +491,23 @@ if($argv[1]==='install') {
   if(!$installer->install($c['repo'].'/examples/joomla'))throw new RuntimeException('Installer transport install failed.');
   if(!$installer->install($c['library']))throw new RuntimeException('Fixture library install failed.');
   $params=json_encode(['api_base'=>$c['apiBase'],'product'=>$c['product']]);
-  $db->setQuery('UPDATE #__extensions SET enabled=1,params='.$db->quote($params).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('doubleentitle'))->execute();
-  $db->setQuery('UPDATE #__extensions SET custom_data='.$db->quote(json_encode(['fixture_kept'=>'keep'])).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('doubleentitle'))->execute();
+  $db->setQuery('UPDATE #__extensions SET enabled=1,params='.$db->quote($params).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('entitle'))->execute();
+  $db->setQuery('UPDATE #__extensions SET custom_data='.$db->quote(json_encode(['fixture_kept'=>'keep'])).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('entitle'))->execute();
   $result=['installed'=>true];
 } elseif($argv[1]==='reconnect') {
-  $plugin=$app->bootPlugin('doubleentitle','installer');
+  $plugin=$app->bootPlugin('entitle','installer');
   $result['installationId']=$plugin->installationId();$result['status']=$plugin->status();
-  $row=$db->setQuery('SELECT params,custom_data FROM #__extensions WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('doubleentitle'))->loadAssoc();
+  $row=$db->setQuery('SELECT params,custom_data FROM #__extensions WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('entitle'))->loadAssoc();
   $custom=json_decode($row['custom_data'],true);$params=json_decode($row['params'],true);
   $result['customDataPreserved']=($custom['fixture_kept']??'')==='keep';
   $result['paramsContainNoSecrets']=!isset($params['activation_token'])&&!isset($params['installation_id']);
   $plugin->deactivate();$result['stableAfterDeactivate']=$plugin->installationId()===$result['installationId'];
   try{$plugin->status();$result['deactivated']=false;}catch(RuntimeException $e){$result['deactivated']=$e->getMessage()==='Activate updates first.';}
-  $result['installedFeatureAfterDeactivate']=include $c['root'].'/libraries/doubleentitlefixture/src/fixture.php';
+  $result['installedFeatureAfterDeactivate']=include $c['root'].'/libraries/entitlefixture/src/fixture.php';
 } else {
-  $plugin=$app->bootPlugin('doubleentitle','installer');$result['pluginBooted']=get_class($plugin)==='DoubleEntitle\\Plugin\\Installer\\DoubleEntitle\\Extension\\DoubleEntitle';
+  $plugin=$app->bootPlugin('entitle','installer');$result['pluginBooted']=get_class($plugin)==='Entitle\\Plugin\\Installer\\Entitle\\Extension\\Entitle';
   $plugin->activate($c['key']);$result['activated']=true;$result['installationId']=$plugin->installationId();$result['status']=$plugin->status();
-  $id=$db->setQuery('SELECT extension_id FROM #__extensions WHERE type='.$db->quote('library').' AND element='.$db->quote('doubleentitlefixture'))->loadResult();
+  $id=$db->setQuery('SELECT extension_id FROM #__extensions WHERE type='.$db->quote('library').' AND element='.$db->quote('entitlefixture'))->loadResult();
   $result['discovery']=Joomla\CMS\Updater\Updater::getInstance()->findUpdates((int)$id,0);
   $update=$db->setQuery('SELECT update_id,detailsurl,version FROM #__updates WHERE extension_id='.(int)$id)->loadObject();
   $result['discoveredVersion']=$update->version??null;
@@ -524,9 +524,9 @@ if($argv[1]==='install') {
   $nativeUpdate=new Joomla\CMS\Updater\Update();$result['detailsLoaded']=$nativeUpdate->loadFromXml($update->detailsurl);
   $model=$app->bootComponent('com_installer')->getMVCFactory()->createModel('Update','Administrator',['ignore_request'=>true]);
   $model->update([(int)$update->update_id]);$result['nativeUpdateResult']=$model->getState('result');
-  $result['installedVersion']=file_get_contents($c['root'].'/libraries/doubleentitlefixture/src/version.txt');
+  $result['installedVersion']=file_get_contents($c['root'].'/libraries/entitlefixture/src/version.txt');
   $params=json_encode(['api_base'=>$c['apiBase'],'product'=>$c['product']]);
-  $db->setQuery('UPDATE #__extensions SET params='.$db->quote($params).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('doubleentitle'))->execute();
+  $db->setQuery('UPDATE #__extensions SET params='.$db->quote($params).' WHERE type='.$db->quote('plugin').' AND folder='.$db->quote('installer').' AND element='.$db->quote('entitle'))->execute();
 }
 }catch(Throwable $e){$result['error']=get_class($e).': '.$e->getMessage();}
 echo 'QUALIFICATION_RESULT:'.json_encode($result,JSON_THROW_ON_ERROR).PHP_EOL;

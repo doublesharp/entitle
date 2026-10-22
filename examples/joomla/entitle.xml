@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <extension type="plugin" group="installer" method="upgrade">
   <!-- This installer transport has its own version, independent of the licensed extension. -->
-  <name>Double Entitle installer transport</name>
+  <name>Doublesharp Entitle installer transport</name>
   <version>1.0.0</version>
   <license>MIT</license>
   <!-- Step 1: map the PHP namespace and include both the service factory and plugin source. -->
-  <namespace path="src">DoubleEntitle\Plugin\Installer\DoubleEntitle</namespace>
-  <files><filename>LICENSE</filename><folder plugin="doubleentitle">services</folder><folder>src</folder></files>
+  <namespace path="src">Entitle\Plugin\Installer\Entitle</namespace>
+  <files><filename>LICENSE</filename><folder plugin="entitle">services</folder><folder>src</folder></files>
   <!-- Step 2: collect routing settings only. UUID/token state is saved separately in custom_data. -->
   <config><fields name="params"><fieldset name="basic">
     <field name="api_base" type="url" label="HTTPS tenant API URL" required="true" />

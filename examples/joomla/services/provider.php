@@ -6,7 +6,7 @@
  */
 defined('_JEXEC') or die;
 
-use DoubleEntitle\Plugin\Installer\DoubleEntitle\Extension\DoubleEntitle;
+use Entitle\Plugin\Installer\Entitle\Extension\Entitle;
 use Joomla\CMS\Extension\PluginInterface;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Plugin\PluginHelper;
@@ -25,7 +25,7 @@ return new class implements ServiceProviderInterface {
     {
         $container->set(PluginInterface::class, function (Container $container) {
             // Step 1: supply the native dispatcher and saved plugin configuration.
-            $plugin = new DoubleEntitle($container->get(DispatcherInterface::class), (array) PluginHelper::getPlugin('installer', 'doubleentitle'));
+            $plugin = new Entitle($container->get(DispatcherInterface::class), (array) PluginHelper::getPlugin('installer', 'entitle'));
             // Step 2: attach the current application before returning the instance.
             $plugin->setApplication(Factory::getApplication());
             return $plugin;

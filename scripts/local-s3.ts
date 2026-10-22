@@ -27,7 +27,7 @@ const moduleVersion = "v0.0.0-20251015172955-9e49d5e7a648";
 const moduleSum = "h1:6TdolSCLSs2nwm8i0PpWDqf9iX2Ty9WQK8wmr7dCnUM=";
 const commit = "9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a";
 const scratch = resolve(
-  process.env.SCRATCH_ROOT ?? "/Volumes/Scratch/double-entitle-wp",
+  process.env.SCRATCH_ROOT ?? "/Volumes/Scratch/entitle",
 );
 if (!scratch.startsWith("/Volumes/Scratch/"))
   throw Error("SCRATCH_ROOT must be a project directory on /Volumes/Scratch");
@@ -39,7 +39,7 @@ const root = `${scratch}/data/local-s3`,
   binary = `${scratch}/cache/minio/bin/minio`;
 const go = process.env.GO_BINARY ?? "/opt/homebrew/bin/go";
 const endpoint = `http://127.0.0.1:${port}`,
-  bucket = "double-entitle-local";
+  bucket = "entitle-local";
 const environment = `${root}/integration.env`,
   state = `${root}/native-process.json`;
 const buildLog = `${scratch}/reports/minio-source-build.log`,

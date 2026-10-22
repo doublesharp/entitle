@@ -5,7 +5,7 @@ import { createDb, migrate, type DB } from "../src/db.ts";
 
 async function fixture(run: (db: DB) => Promise<void>) {
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/tenant-schema-",
+    "/Volumes/Scratch/entitle/tmp/tenant-schema-",
   );
   const db = createDb(`sqlite:${path}/db`);
   try {
@@ -262,7 +262,7 @@ test("composite database foreign keys reject cross-tenant ownership", async () =
 
 test("forward migration preserves populated rows and invalidates old authentication links", async () => {
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/tenant-upgrade-",
+    "/Volumes/Scratch/entitle/tmp/tenant-upgrade-",
   );
   const db = createDb(`sqlite:${path}/db`);
   try {
@@ -533,7 +533,7 @@ async function verifyStripeStatusUpgrade(db: DB) {
 
 test("Stripe connection state upgrades independently from platform subscription status", async () => {
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/stripe-status-upgrade-",
+    "/Volumes/Scratch/entitle/tmp/stripe-status-upgrade-",
   );
   const db = createDb(`sqlite:${path}/db`);
   try {

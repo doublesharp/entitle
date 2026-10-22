@@ -93,10 +93,10 @@ test("configuration honors explicit database, storage, assets, SMTP and exemptio
     ...credentials,
     PUBLIC_ORIGIN: "http://localhost:4567/",
     DATABASE_URL: "postgresql://localhost/test",
-    DATA_DIR: "/Volumes/Scratch/double-entitle-wp/data/config-test",
-    WORK_DIR: "/Volumes/Scratch/double-entitle-wp/data/config-artifacts",
-    WEB_DIR: "/Volumes/Scratch/double-entitle-wp/build/config-web",
-    BUILD_DIR: "/Volumes/Scratch/double-entitle-wp/build/config",
+    DATA_DIR: "/Volumes/Scratch/entitle/data/config-test",
+    WORK_DIR: "/Volumes/Scratch/entitle/data/config-artifacts",
+    WEB_DIR: "/Volumes/Scratch/entitle/build/config-web",
+    BUILD_DIR: "/Volumes/Scratch/entitle/build/config",
     PORT: "4567",
     SMTP_HOST: "smtp.example.test",
     SMTP_PORT: "465",
@@ -114,11 +114,11 @@ test("configuration honors explicit database, storage, assets, SMTP and exemptio
   assert.equal(value.databaseUrl, "postgresql://localhost/test");
   assert.equal(
     value.storage,
-    "/Volumes/Scratch/double-entitle-wp/data/config-artifacts",
+    "/Volumes/Scratch/entitle/data/config-artifacts",
   );
   assert.equal(
     value.staticDir,
-    "/Volumes/Scratch/double-entitle-wp/build/config-web",
+    "/Volumes/Scratch/entitle/build/config-web",
   );
   assert.equal(value.smtpPort, 465);
   assert.equal(value.smtpUser, "test");
@@ -134,11 +134,11 @@ test("configuration honors explicit database, storage, assets, SMTP and exemptio
   assert.equal(value.stripeWebhookSecret, "whsec_test");
   const withBuild = loadConfig({
     ...credentials,
-    BUILD_DIR: "/Volumes/Scratch/double-entitle-wp/build/config",
+    BUILD_DIR: "/Volumes/Scratch/entitle/build/config",
   });
   assert.equal(
     withBuild.staticDir,
-    "/Volumes/Scratch/double-entitle-wp/build/config/web",
+    "/Volumes/Scratch/entitle/build/config/web",
   );
 });
 test("SaaS transfer and storage limits reject unsafe configuration", () => {

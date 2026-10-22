@@ -9,7 +9,7 @@ import { loadConfig } from "../src/config.ts";
 import { hash } from "../src/crypto.ts";
 import type { SellerSession } from "../src/platform-auth.ts";
 const directory = await mkdtemp(
-  `${process.env.TMPDIR ?? "/Volumes/Scratch/double-entitle-wp/tmp"}/platform-billing-`,
+  `${process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp"}/platform-billing-`,
 );
 const database = await isolatedDatabase(`sqlite:${directory}/db`);
 const db = database.db;

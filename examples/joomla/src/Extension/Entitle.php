@@ -1,5 +1,5 @@
 <?php
-namespace DoubleEntitle\Plugin\Installer\DoubleEntitle\Extension;
+namespace Entitle\Plugin\Installer\Entitle\Extension;
 
 defined('_JEXEC') or die;
 
@@ -19,7 +19,7 @@ use Joomla\CMS\Event\Installer\BeforePackageDownloadEvent;
  * The persistent UUID and token live in this plugin row's custom_data, separate
  * from form-managed params. License state never gates installed extension features.
  */
-final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
+final class Entitle extends CMSPlugin implements SubscriberInterface
 {
     /** @return array<string, string> Native feed/package events mapped to our header hook. */
     public static function getSubscribedEvents(): array
@@ -93,7 +93,7 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
     {
         return $query->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))
             ->where($db->quoteName('folder') . ' = ' . $db->quote('installer'))
-            ->where($db->quoteName('element') . ' = ' . $db->quote('doubleentitle'));
+            ->where($db->quoteName('element') . ' = ' . $db->quote('entitle'));
     }
 
     /**
@@ -113,7 +113,7 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
         try {
             $document = $raw === null || trim($raw) === '' ? new \stdClass() : json_decode($raw, false, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) { throw new \RuntimeException('Existing plugin custom data cannot be modified safely.'); }
-        if (!$document instanceof \stdClass || (isset($document->double_entitle) && !$document->double_entitle instanceof \stdClass)) {
+        if (!$document instanceof \stdClass || (isset($document->entitle) && !$document->entitle instanceof \stdClass)) {
             throw new \RuntimeException('Existing plugin custom data cannot be modified safely.');
         }
         return [$db, $raw, $document];
@@ -127,7 +127,7 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
      */
     private function documentState(\stdClass $document): array
     {
-        if (property_exists($document, 'double_entitle')) { return (array) $document->double_entitle; }
+        if (property_exists($document, 'entitle')) { return (array) $document->entitle; }
         // Migrate prototype state before a later form save can discard unknown params.
         $state = [];
         foreach (['installation_id', 'activation_token'] as $key) {
@@ -151,7 +151,7 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
             // Step 1: read the latest document and change only our reserved object.
             [$db, $raw, $document] = $this->document();
             $state = $change($this->documentState($document));
-            $document->double_entitle = (object) $state;
+            $document->entitle = (object) $state;
             $encoded = json_encode($document, JSON_THROW_ON_ERROR);
             if ($encoded === $raw) { return $state; }
             $query = $this->rowConditions($db, $db->getQuery(true)->update($db->quoteName('#__extensions'))
@@ -170,7 +170,7 @@ final class DoubleEntitle extends CMSPlugin implements SubscriberInterface
     {
         [, , $document] = $this->document();
         $state = $this->documentState($document);
-        if (!property_exists($document, 'double_entitle') && $state !== []) {
+        if (!property_exists($document, 'entitle') && $state !== []) {
             return $this->mutateState(static fn(array $current): array => $current);
         }
         return $state;

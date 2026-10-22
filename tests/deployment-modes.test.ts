@@ -40,7 +40,7 @@ test("production standalone uses merchant credentials without Connect or a platf
 });
 
 async function fixture(t: TestContext, setup?: (db: Awaited<ReturnType<typeof isolatedDatabase>>["db"]) => Promise<void>) {
-  const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/deployment-modes-");
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/deployment-modes-");
   const config = loadConfig({ ...credentials, DATA_DIR: root, WEB_DIR: `${root}/web`, LOCAL_BILLING: "true", STANDALONE_OWNER_EMAIL: "owner@example.test" });
   const database = await isolatedDatabase(config.databaseUrl);
   t.after(async () => { await database.close(); await rm(root, { recursive: true, force: true }); });
@@ -98,7 +98,7 @@ test("standalone rejects stale owner login tokens and cannot bootstrap an unconf
 });
 
 test("standalone refuses a multitenant or connected database without changing its records", async t => {
-  const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/deployment-refuse-");
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/deployment-refuse-");
   const config = loadConfig({ ...credentials, DATA_DIR: root });
   const database = await isolatedDatabase(config.databaseUrl), db = database.db;
   t.after(async () => { await database.close(); await rm(root, { recursive: true, force: true }); });

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { build } from "vite";
 import { site } from "../src/site.ts";
 const out = resolve(
-  process.env.BUILD_DIR ?? "/Volumes/Scratch/double-entitle-wp/build/main",
+  process.env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main",
 );
 mkdirSync(out, { recursive: true });
 if (!existsSync(`${out}/node_modules`))

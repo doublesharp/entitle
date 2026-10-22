@@ -225,7 +225,7 @@ test("Electron integration configures authenticated generic native updater witho
 
 test("Native templates include authenticated lifecycle and documented integration boundaries", async () => {
   for (const [folder, source] of [
-    ["joomla", "src/Extension/DoubleEntitle.php"],
+    ["joomla", "src/Extension/Entitle.php"],
     ["tauri", "updates.rs"],
     ["sparkle", "LicenseUpdates.swift"],
     ["jetbrains", "LicenseUpdates.kt"],
@@ -271,7 +271,7 @@ test("JetBrains URL scope supports the IDE native query without authenticating u
     t.skip("JDK unavailable; Java URL scope contract not executed");
     return;
   }
-  const base = "/Volumes/Scratch/double-entitle-wp/tmp/framework-protocols";
+  const base = "/Volumes/Scratch/entitle/tmp/framework-protocols";
   await mkdir(base, { recursive: true });
   const output = await mkdtemp(`${base}/jetbrains-`);
   try {
@@ -308,7 +308,7 @@ test("JetBrains URL scope supports the IDE native query without authenticating u
 
 test("Electron storage refuses corrupt identities and insecure credential storage", async () => {
   const { electronStorage } = await moduleAt("electron/storage.mjs");
-  const base = "/Volumes/Scratch/double-entitle-wp/tmp/framework-protocols";
+  const base = "/Volumes/Scratch/entitle/tmp/framework-protocols";
   await mkdir(base, { recursive: true });
   const directory = await mkdtemp(`${base}/electron-`);
   try {

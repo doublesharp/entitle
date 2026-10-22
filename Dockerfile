@@ -10,7 +10,8 @@ COPY tests ./tests
 COPY docs ./docs
 COPY examples ./examples
 COPY deploy ./deploy
-COPY Dockerfile LICENSE ADDITIONAL-PERMISSION.md NOTICE README.md CONTRIBUTING.md .env.example .node-version .gitignore .dockerignore compose.yaml compose.test.yaml ./
+COPY .github ./.github
+COPY Dockerfile LICENSE ADDITIONAL-PERMISSION.md NOTICE README.md .env.example .node-version .gitignore .dockerignore ./
 COPY web ./web
 ENV BUILD_DIR=/build
 RUN pnpm typecheck && pnpm lint && pnpm build && pnpm prune --prod

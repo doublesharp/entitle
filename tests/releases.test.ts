@@ -9,7 +9,7 @@ import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { createDb, migrate, reset } from "../src/db.ts";
 import { Releases, type Publication } from "../src/releases.ts";
 import { zipBytes, type ZipEntry } from "./helpers/zip.ts";
-const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/releases-");
+const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/releases-");
 const db = createDb(`sqlite:${root}/db`);
 class FixtureStore extends InMemoryArtifactStore {
   readonly ids = new Set<string>();

@@ -5,7 +5,7 @@ import { migrate, createDb, type DB } from "../src/db.ts";
 import { randomUUID } from "node:crypto";
 async function fixture(run: (db: DB) => Promise<void>) {
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/checkout-schema-",
+    "/Volumes/Scratch/entitle/tmp/checkout-schema-",
   );
   const parent =
     process.env.TEST_SAAS_DATABASE_URL ?? process.env.TEST_MYSQL_DATABASE_URL;

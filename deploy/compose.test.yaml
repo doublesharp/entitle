@@ -1,3 +1,4 @@
+name: entitle-test
 services:
   postgres:
     image: postgres:18
@@ -7,7 +8,7 @@ services:
     ports: ["127.0.0.1:55432:5432"]
     volumes:
       [
-        "${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/postgres:/var/lib/postgresql",
+        "${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/postgres:/var/lib/postgresql",
       ]
   mysql:
     image: mysql:8.4
@@ -17,7 +18,7 @@ services:
     ports: ["127.0.0.1:53306:3306"]
     volumes:
       [
-        "${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/mysql:/var/lib/mysql",
+        "${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/mysql:/var/lib/mysql",
       ]
   mail:
     image: axllent/mailpit:v1.30.0
@@ -30,16 +31,16 @@ services:
       WORDPRESS_DB_PASSWORD: entitle-test
       WORDPRESS_DB_NAME: wordpress
       WORDPRESS_CONFIG_EXTRA: &wordpress-config-extra |
-        define('DOUBLE_ENTITLE_API_URL', 'http://localhost:3211/api/v1/tenants/primary');
-        define('DOUBLE_ENTITLE_ALLOW_HTTP', true);
-        define('DOUBLE_ENTITLE_FREE_VERSION', '1.0.0');
+        define('ENTITLE_API_URL', 'http://localhost:3211/api/v1/tenants/primary');
+        define('ENTITLE_ALLOW_HTTP', true);
+        define('ENTITLE_FREE_VERSION', '1.0.0');
         define('WP_TEMP_DIR', '/wp-tmp');
         define('FS_METHOD', 'direct');
         define('AUTOMATIC_UPDATER_DISABLED', false);
     ports: ["127.0.0.1:8088:80"]
     volumes:
-      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wordpress:/var/www/html
-      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wp-tmp:/wp-tmp
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/wordpress:/var/www/html
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/wp-tmp:/wp-tmp
   wordpress-relay:
     image: alpine/socat@sha256:22d77becaeeea8ef56b8c4bb2312323acafe85354be6a85714ff5050e3537842
     profiles: [wordpress]
@@ -70,23 +71,23 @@ services:
       WORDPRESS_DB_USER: root
       WORDPRESS_DB_PASSWORD: entitle-test
       WORDPRESS_DB_NAME: wordpress
-      DOUBLE_ENTITLE_INTEGRATION: "1"
+      ENTITLE_INTEGRATION: "1"
       WORDPRESS_CONFIG_EXTRA: *wordpress-config-extra
     volumes:
-      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wordpress:/var/www/html
-      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/wp-tmp:/wp-tmp
-      - .:/workspace:ro
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/wordpress:/var/www/html
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/wp-tmp:/wp-tmp
+      - ..:/workspace:ro
 
   # Primary local recipe: node scripts/local-s3.ts up
   # Optional container recipe: node scripts/local-s3.ts prepare;
-  # docker compose -f compose.test.yaml --profile s3 up -d --wait --wait-timeout 600 s3;
+  # docker compose -f deploy/compose.test.yaml --profile s3 up -d --wait --wait-timeout 600 s3;
   # node scripts/local-s3.ts bucket
   # Run native OR container fixture: both publish loopback19000.
   s3:
     profiles: [s3]
     image: golang:1.27.1@sha256:162be5298a40ed317005c8339c6de4d10d3eef336d66dc8e9259b03ab9d3a6d2
     env_file:
-      - path: ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}/data/local-s3/integration.env
+      - path: ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}/data/local-s3/integration.env
         required: false
     environment:
       GOPATH: /scratch/cache/go
@@ -123,4 +124,4 @@ services:
       retries: 30
       start_period: 10m
     volumes:
-      - ${SCRATCH_ROOT:-/Volumes/Scratch/double-entitle-wp}:/scratch
+      - ${SCRATCH_ROOT:-/Volumes/Scratch/entitle}:/scratch

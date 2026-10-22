@@ -11,7 +11,7 @@ import { Licenses } from "../src/licensing.ts";
 import { loadConfig } from "../src/config.ts";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/stripe-coverage-",
+  "/Volumes/Scratch/entitle/tmp/stripe-coverage-",
 );
 const db = createDb(process.env.TEST_DATABASE_URL ?? `sqlite:${root}/db`);
 type Request = {

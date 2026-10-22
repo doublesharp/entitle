@@ -73,7 +73,7 @@ export async function allCompleted<T>(operations: Promise<T>[]): Promise<T[]> {
 // TEST_DATABASE_URL is deliberately ignored: it can point at retained data.
 export async function invariantDatabase() {
   await access("/Volumes/Scratch");
-  const temporary = "/Volumes/Scratch/double-entitle-wp/tmp";
+  const temporary = "/Volumes/Scratch/entitle/tmp";
   await mkdir(temporary, { recursive: true });
   const root = await mkdtemp(`${temporary}/invariants-`);
   let database: Awaited<ReturnType<typeof isolatedDatabase>> | undefined;

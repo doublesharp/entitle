@@ -1,4 +1,4 @@
-# Double Entitle Publisher Use Permission 1.0
+# Doublesharp Entitle Publisher Use Permission 1.0
 
 Justin Silver, the licensor, makes the software available under the unmodified
 Elastic License 2.0 in LICENSE. In addition to the rights in that license, the
@@ -72,7 +72,7 @@ and security fixes, subject to the Notices section of Elastic License 2.0.
 Each recipient receives these permissions directly from the licensor. These
 permissions do not grant the licensor rights in a contributor's new code.
 Contributions to the licensor's project are accepted only on the terms
-described in CONTRIBUTING.md.
+described in .github/CONTRIBUTING.md.
 
 ## 7. Uses not covered by this additional permission
 

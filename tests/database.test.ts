@@ -25,7 +25,7 @@ test("database URLs select the actual dialect, and generated SQL uses that engin
 });
 test("SQLite migration preserves constraints and reruns without deleting records; destructive rollback is refused", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/migrations-",
+    "/Volumes/Scratch/entitle/tmp/migrations-",
   );
   const db = createDb(`sqlite:${root}/database.sqlite`);
   try {
@@ -213,7 +213,7 @@ test(
 
 test("migration002 upgrades existing products without changing original migration data", async () => {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/migration-upgrade-",
+    "/Volumes/Scratch/entitle/tmp/migration-upgrade-",
   );
   const db = createDb(`sqlite:${root}/db`);
   try {

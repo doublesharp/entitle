@@ -5,7 +5,7 @@ import { createDb, migrate } from "../src/db.ts";
 import { runQueue } from "../src/queue.ts";
 
 test("platform email delivery erases the encrypted credential payload after success", async () => {
-  const directory = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/platform-queue-");
+  const directory = await mkdtemp("/Volumes/Scratch/entitle/tmp/platform-queue-");
   const db = createDb(`sqlite:${directory}/db`);
   try {
     await migrate(db);
@@ -39,7 +39,7 @@ test("platform email delivery erases the encrypted credential payload after succ
   }
 });
 test("jobs beyond the retry window retain retryable encrypted payloads", async () => {
-  const directory = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/queue-deadletter-");
+  const directory = await mkdtemp("/Volumes/Scratch/entitle/tmp/queue-deadletter-");
   const db = createDb(`sqlite:${directory}/db`);
   try {
     await migrate(db);
@@ -56,7 +56,7 @@ test("jobs beyond the retry window retain retryable encrypted payloads", async (
   }finally{await db.destroy();await rm(directory,{recursive:true,force:true});}
 });
 test("a multi-hour provider outage remains pending until its seventy-two-hour retry window",async()=>{
-  const directory=await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/queue-outage-");
+  const directory=await mkdtemp("/Volumes/Scratch/entitle/tmp/queue-outage-");
   const db=createDb(`sqlite:${directory}/db`),original=Date.now;
   let now=original();
   try{

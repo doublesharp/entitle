@@ -26,7 +26,7 @@ async function fixture(
   overrides: Partial<Config> & { maxSellerSignupsPerHour?: number } = {},
 ) {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/security-review-",
+    "/Volumes/Scratch/entitle/tmp/security-review-",
   );
   const config = {
     ...loadConfig({ DEPLOYMENT_MODE: "hosted",

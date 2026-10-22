@@ -12,7 +12,7 @@ import { verifyArtifact } from "../src/package-validation.ts";
 import { zipBytes } from "./helpers/zip.ts";
 async function fixture(t: import("node:test").TestContext) {
   const directory = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/streaming-publication-",
+    "/Volumes/Scratch/entitle/tmp/streaming-publication-",
   );
   const fixture = await isolatedDatabase("sqlite:" + directory + "/db");
   const { db } = fixture;

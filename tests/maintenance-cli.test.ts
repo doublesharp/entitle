@@ -15,14 +15,14 @@ test("offline maintenance entry point exists", () => {
 const secret = "21".repeat(32);
 async function fixture(t: test.TestContext) {
   await mkdir(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
     {
       recursive: true,
       mode: 0o700,
     },
   );
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/case-",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/case-",
   );
   const database = await isolatedDatabase(`sqlite:${path}/db`);
   const db = database.db;
@@ -1113,14 +1113,14 @@ function virtualTime(t: test.TestContext) {
 }
 async function directory(t: test.TestContext) {
   await mkdir(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
     {
       recursive: true,
       mode: 0o700,
     },
   );
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/timeouts-",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/timeouts-",
   );
   t.after(() => rm(path, { recursive: true, force: true }));
   return path;

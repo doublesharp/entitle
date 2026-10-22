@@ -15,7 +15,7 @@ import { InMemoryArtifactStore } from "../src/storage.ts";
 import { AppError } from "../src/errors.ts";
 import { zipBytes } from "./helpers/zip.ts";
 const directory = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/saas-publication-",
+  "/Volumes/Scratch/entitle/tmp/saas-publication-",
 );
 const db = createDb(`sqlite:${directory}/db`);
 class Store extends InMemoryArtifactStore {

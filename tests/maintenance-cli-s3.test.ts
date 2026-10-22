@@ -26,14 +26,14 @@ test(
     const endpoint = new URL(process.env.TEST_S3_ENDPOINT!);
     assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname));
     await mkdir(
-      "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
+      "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli",
       {
         recursive: true,
         mode: 0o700,
       },
     );
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/minio-",
+      "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/maintenance-cli/minio-",
     );
     const bucket = `maintenance-${randomUUID()}`;
     const sdk = new S3Client({

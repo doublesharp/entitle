@@ -182,20 +182,36 @@ export function publicDocs(
           ),
         ]),
       ]),
-      h("ul", { class: "docs-checklist" }, [
-        h("li", [
-          h("a", { href: "#getting-started" }, "Publish your first product"),
-          ". Follow setup through purchase, activation and an update.",
-        ]),
-        h("li", [
-          h("a", { href: "#client-integration" }, "Connect an existing app"),
-          ". Choose a framework, persist credentials and test your native updater.",
-        ]),
-        h("li", [
-          h("a", { href: "#self-hosting" }, "Operate the service"),
-          ". Configure private infrastructure, limits, backups and recovery.",
-        ]),
-      ]),
+      h(
+        "nav",
+        { class: "docs-paths", "aria-label": "Choose your documentation path" },
+        [
+          ...[
+            [
+              "#getting-started",
+              "Publish and sell",
+              "Create a product, connect payments and deliver your first paid update.",
+            ],
+            [
+              "#client-integration",
+              "Integrate your software",
+              "Choose an adapter, activate an installation and verify a package.",
+            ],
+            [
+              "#customer-accounts",
+              "Support a customer",
+              "Recover access, move an installation and explain billing or renewals.",
+            ],
+            [
+              "#self-hosting",
+              "Operate Entitle",
+              "Configure your server, protect data and plan backup and recovery.",
+            ],
+          ].map(([href, title, copy]) =>
+            h("a", { href }, [h("strong", title), h("span", copy)]),
+          ),
+        ],
+      ),
       section("hosting-options", "Before you start", "Hosted or self-hosted", [
         paragraph(
           `Both versions use the same ${site.name} application, licensing engine and framework adapters. Choose the hosted service to have the platform operated for you, or self-host standalone for your own software business.`,
@@ -983,7 +999,7 @@ export function publicDocs(
       ),
       section("self-hosting", "Operators", "Deploy and configure the service", [
         paragraph(
-          "One application serves the API, built Vue interfaces and database-backed jobs. Run it behind an HTTPS proxy with a persistent SQLite database or configured PostgreSQL/MySQL, private S3-compatible storage and SMTP. Redis is optional. The source package contains compose.yaml, .env.example and the full deployment/configuration guides.",
+          "One application serves the API, built Vue interfaces and database-backed jobs. Run it behind an HTTPS proxy with a persistent SQLite database or configured PostgreSQL/MySQL, private S3-compatible storage and SMTP. Redis is optional. The source package contains deploy/compose.yaml, .env.example and the full deployment/configuration guides.",
         ),
         table(
           "Required production settings",
@@ -1294,6 +1310,36 @@ export function publicDocs(
         ),
       ]),
       section("troubleshooting", "Help", "Diagnose a failed workflow", [
+        h("h3", "Bought a plugin or app? Start here."),
+        paragraph(
+          "Open the customer page linked in your purchase email. Each software publisher has its own workspace and handles questions about its products, invoices and refunds.",
+        ),
+        h("ol", { class: "docs-checklist" }, [
+          h(
+            "li",
+            "Request a fresh sign-in link and open it in the same browser that requested it.",
+          ),
+          h(
+            "li",
+            "Check your license's paid-through date and installations. Deactivate an old site or device to free a seat.",
+          ),
+          h(
+            "li",
+            "Open the billing portal from your account for invoices, payment details or cancellation. Replacing a key does not cancel a subscription.",
+          ),
+        ]),
+        h("p", [
+          h(
+            "a",
+            { href: "#customer-accounts" },
+            "Customer account and key recovery guide →",
+          ),
+        ]),
+        note(
+          "Share diagnostics safely",
+          "Give your software publisher the request ID, product, version and what you were trying to do. Never share your license key, activation token, session cookie or export passphrase in a support thread.",
+        ),
+        h("h3", "Publishing or operating the service?"),
         paragraph(
           "Keep the HTTP status, error code and request ID, plus the workspace, product, framework, target and version. Exclude keys, tokens, cookies, passphrases and provider payloads from shared diagnostics. The source package's docs/troubleshooting.md has the full operator checklist.",
         ),
@@ -1363,7 +1409,7 @@ export function publicDocs(
       ]),
       section("licensing", "Public source", "Source and licenses", [
         paragraph(
-          "The service and dashboard are source available under Elastic License 2.0 plus the Double Entitle Publisher Use Permission. Client adapters and examples use MIT; generated client setup snippets also have an attribution-free Zero-Clause BSD grant. Third-party software keeps its own license. Copyright © 2026 Justin Silver. The software is provided without warranty.",
+          `The service and dashboard are source available under Elastic License 2.0 plus the ${site.name} Publisher Use Permission. Client adapters and examples use MIT; generated client setup snippets also have an attribution-free Zero-Clause BSD grant. Third-party software keeps its own license. Copyright © 2026 Justin Silver. The software is provided without warranty.`,
         ),
         paragraph(
           "Use and modify the service for your own software business, including paid products, buyer portals, activation and downloads. The publisher permission does not cover offering a licensing or distribution platform as a hosted or managed service to independent publishers. Such services remain subject to the license restrictions. Deployment flags do not grant license rights.",

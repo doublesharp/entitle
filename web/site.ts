@@ -185,11 +185,13 @@ const header = (docs = false) =>
     ]),
     h("nav", { "aria-label": "Main navigation" }, [
       h("a", { href: "/#features" }, "Features"),
+      h("a", { href: "/#hosting" }, "Hosting"),
       h(
         "a",
         { href: "/docs", "aria-current": docs ? "page" : undefined },
         "Docs",
       ),
+      h("a", { href: "/docs#troubleshooting" }, "Help"),
       h("a", { href: "/seller" }, "Seller dashboard"),
     ]),
   ]);
@@ -500,7 +502,7 @@ const publicHome = () => [
           [
             icons.chart,
             "See what is happening",
-            "Real records for licenses, installations, seats, storage and served downloads. Payment totals stay separate for each currency.",
+            "See paid licenses, seats, storage and served downloads. Track payments by currency, spot failed work and review daily bandwidth with Hosted Pro.",
           ],
           [
             icons.layers,
@@ -509,8 +511,8 @@ const publicHome = () => [
           ],
           [
             icons.code,
-            "Public source. Built for your workflow.",
-            "Use the dashboard or automate with scoped APIs. Inspect the public source and self-host for your own software business, with private S3-compatible storage.",
+            "A dashboard when you need it. An API when you don’t.",
+            "Publish through the dashboard or a scoped CI key. Test purchases in an isolated sandbox and connect Hosted Pro signed events to your own tools.",
           ],
         ].map(([icon, title, copy]) =>
           h("article", { class: "home-feature" }, [
@@ -587,6 +589,135 @@ const publicHome = () => [
       ]),
     ],
   ),
+  h(
+    "section",
+    {
+      id: "hosting",
+      class: "home-section",
+      "aria-labelledby": "hosting-title",
+    },
+    [
+      h("div", { class: "home-section-heading" }, [
+        h("p", { class: "eyebrow" }, "Choose who runs it"),
+        h("h2", { id: "hosting-title" }, "Your business. Your way to run it."),
+        h(
+          "p",
+          "Use the same licensing engine and framework adapters with hosted publishing or your own standalone installation.",
+        ),
+      ]),
+      h("div", { class: "hosting-grid" }, [
+        h("article", { class: "hosting-option" }, [
+          h("p", { class: "eyebrow" }, "Focus on your products"),
+          h("h3", "Hosted service"),
+          h(
+            "p",
+            "Create a publisher workspace and connect your own Stripe account. The service operator runs the app, private storage and backups.",
+          ),
+          h("ul", [
+            h(
+              "li",
+              "Starter includes licensing, private updates, buyer accounts, recovery and sandbox testing.",
+            ),
+            h(
+              "li",
+              "Hosted Pro adds signed webhooks and advanced daily bandwidth reports.",
+            ),
+          ]),
+          h(
+            "p",
+            { class: "hosting-cost" },
+            "Platform subscription and configured application fee, plus separate Stripe fees. Subscription amounts are shown at checkout; the dashboard shows the fee rate.",
+          ),
+          h("a", { href: "/seller", class: "button" }, "Open seller dashboard"),
+          h(
+            "a",
+            { href: "/docs#hosted-tiers" },
+            "Compare hosted capabilities →",
+          ),
+        ]),
+        h("article", { class: "hosting-option" }, [
+          h("p", { class: "eyebrow" }, "Run your own infrastructure"),
+          h("h3", "Self-hosted standalone"),
+          h(
+            "p",
+            "Run Entitle for your own software business. Manage multiple products with your own Stripe account, database and private S3-compatible storage.",
+          ),
+          h("ul", [
+            h(
+              "li",
+              "All local capabilities, including signed events and advanced reports.",
+            ),
+            h("li", "One app serves the API and dashboard. Redis is optional."),
+          ]),
+          h(
+            "p",
+            { class: "hosting-cost" },
+            "No platform subscription or application fee. You supply hosting, storage, email and backups, and pay your provider and Stripe costs.",
+          ),
+          h(
+            "a",
+            { href: "/docs#self-hosting", class: "button-secondary" },
+            "Read the deployment guide",
+          ),
+          h(
+            "a",
+            { href: "/docs#licensing" },
+            "View source and publisher license →",
+          ),
+        ]),
+      ]),
+    ],
+  ),
+  h(
+    "section",
+    {
+      id: "questions",
+      class: "home-section home-questions",
+      "aria-labelledby": "questions-title",
+    },
+    [
+      h("div", { class: "home-section-heading" }, [
+        h("p", { class: "eyebrow" }, "Before your first release"),
+        h(
+          "h2",
+          { id: "questions-title" },
+          "A few things you might be wondering.",
+        ),
+      ]),
+      ...[
+        [
+          "Can I keep my own website and checkout design?",
+          "Yes. Your storefront can start Stripe Checkout or use Stripe Elements for a styled payment form. Entitle controls prices and paid access on the server.",
+          "/docs#checkout",
+          "Explore checkout integration",
+        ],
+        [
+          "What happens when a customer stops renewing?",
+          "They keep access to downloads through their paid period. Installed software keeps working after expiry and during licensing-server outages.",
+          "/docs#billing",
+          "Understand billing and access",
+        ],
+        [
+          "Can I use this beyond WordPress?",
+          "Yes. Choose adapters for Joomla, Electron, Tauri, Sparkle and JetBrains, or integrate a generic client through the API. WordPress has its own site activation and update flow.",
+          "/docs#framework-support",
+          "Find your framework",
+        ],
+        [
+          "How do customers recover a key or move a site?",
+          "Their workspace customer page provides email sign-in, license replacement, installation deactivation, downloads and billing management. Publishers can check access and payment state without asking for secret keys.",
+          "/docs#customer-accounts",
+          "Read the buyer support guide",
+        ],
+      ].map(([question, answer, href, label]) =>
+        h("details", { class: "home-question" }, [
+          h("summary", question),
+          h("p", answer),
+          h("a", { href }, label),
+        ]),
+      ),
+    ],
+  ),
   h("section", { class: "home-cta", "aria-labelledby": "start-title" }, [
     h("div", [
       h("p", { class: "eyebrow" }, "Your next release starts here"),
@@ -640,6 +771,7 @@ export function mountPublicSite(
             h("footer", { class: "site-footer" }, [
               h("span", site.name),
               h("a", { href: "/docs" }, "Documentation"),
+              h("a", { href: "/docs#troubleshooting" }, "Support guide"),
               h("a", { href: "/docs#licensing" }, "Source & licenses"),
               h(
                 "a",

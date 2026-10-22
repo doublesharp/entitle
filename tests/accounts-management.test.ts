@@ -57,11 +57,11 @@ const closureApproval = {
 
 async function fixture(t: test.TestContext, standalone = false) {
   await mkdir(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy",
     { recursive: true },
   );
   const path = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/saas-features-20261021/r3-fixes/privacy/accounts-case-",
+    "/Volumes/Scratch/entitle/tmp/saas-features-20261021/r3-fixes/privacy/accounts-case-",
   );
   const db = createDb(`sqlite:${path}/db`);
   const app = Fastify();

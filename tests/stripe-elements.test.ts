@@ -8,7 +8,7 @@ import {loadConfig} from "../src/config.ts";
 import {StripeBilling} from "../src/stripe.ts";
 
 test("Elements sessions use canonical annual prices and the connected account without creating entitlement",async()=>{
-  const directory=await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/elements-");
+  const directory=await mkdtemp("/Volumes/Scratch/entitle/tmp/elements-");
   const db=createDb(`sqlite:${directory}/db`),requests:{path:string;account:unknown;body:URLSearchParams}[]=[];
   let missingSecret=false;
   const server=createServer(async(req,res)=>{

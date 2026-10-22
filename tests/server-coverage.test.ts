@@ -13,7 +13,7 @@ import { loadConfig } from "../src/config.ts";
 import { createDb } from "../src/db.ts";
 
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/server-coverage-",
+  "/Volumes/Scratch/entitle/tmp/server-coverage-",
 );
 let serial = 0;
 const config = () =>

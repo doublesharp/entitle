@@ -26,7 +26,7 @@ export async function enqueueEmail(
     customer_id: customerId,
     license_id: licenseId,
     kind,
-    payload: seal({ ...message, messageId: `<${id}@double-entitle>` }, secret),
+    payload: seal({ ...message, messageId: `<${id}@entitle>` }, secret),
     created_at: Date.now(),
   });
 }

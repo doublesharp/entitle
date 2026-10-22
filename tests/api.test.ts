@@ -10,7 +10,7 @@ import { buildApp } from "../src/app.ts";
 import { hash, unseal } from "../src/crypto.ts";
 import type { Message } from "../src/email.ts";
 import { Licenses } from "../src/licensing.ts";
-const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/api-");
+const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/api-");
 const db = createDb(`sqlite:${root}/db`);
 const config = {
   origin: "http://localhost:3210",
@@ -39,7 +39,7 @@ const config = {
 await mkdir(config.staticDir);
 await writeFile(
   `${config.staticDir}/index.html`,
-  "<!doctype html><title>Double Entitle</title>",
+  "<!doctype html><title>Doublesharp Entitle</title>",
 );
 const store = new InMemoryArtifactStore();
 const app = await buildApp(config, db, undefined, { store });
@@ -265,7 +265,7 @@ test("webhook raw signature verification, durable receipt, duplicate handling an
 test("single deployment serves built customer assets", async () => {
   const response = await app.inject({ url: "/" });
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /Double Entitle/);
+  assert.match(response.body, /Doublesharp Entitle/);
 });
 test("operator publishes private ZIP; cached package URL has no expiry and current access always wins", async () => {
   const auth = { authorization: `Bearer ${testTenantKey}` };

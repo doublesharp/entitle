@@ -15,7 +15,7 @@ import { packageSource } from "../scripts/distribution.ts";
 
 test("source distribution includes reviewed files and excludes private configuration and runtime data", async (t) => {
   const dir = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/distribution-",
+    "/Volumes/Scratch/entitle/tmp/distribution-",
   );
   t.after(() => rm(dir, { recursive: true, force: true }));
   const root = dir + "/source",
@@ -100,13 +100,15 @@ test("real source manifest contains the complete reviewed tree and Docker suppli
     .split(/\r?\n/)
     .sort();
   assert.deepEqual(await sourceFiles(process.cwd()), expected);
+  for (const path of [".github/CONTRIBUTING.md", "deploy/compose.yaml", "deploy/compose.test.yaml"])
+    assert.ok(expected.includes(path), `Source archive omits relocated ${path}`);
   const docker = (await readFile("Dockerfile", "utf8")).split("\nFROM ")[0]!;
   const copied = docker
     .split("\n")
     .filter((l) => l.startsWith("COPY "))
     .flatMap((l) => l.slice(5).trim().split(/\s+/).slice(0, -1));
-  for (const path of expected.filter((p) => !p.includes("/")))
-    assert.ok(copied.includes(path), `Dockerfile does not copy ${path}`);
+  for (const path of expected)
+    assert.ok(copied.some((input) => input === path || path.startsWith(`${input}/`)), `Dockerfile does not supply ${path}`);
 });
 
 for (const status of [200, 503]) {

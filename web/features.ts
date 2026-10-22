@@ -1350,7 +1350,7 @@ export const SellerFeaturePanel = defineComponent({
               new Blob([JSON.stringify(data, null, 2)], {
                 type: "application/json",
               }),
-              "double-entitle-account.json",
+              "entitle-account.json",
             );
           }),
         pending.value,
@@ -1469,7 +1469,7 @@ export const SellerFeaturePanel = defineComponent({
                 () =>
                   saveBlob(
                     new Blob([oneTime.value], { type: "text/plain" }),
-                    "double-entitle-secrets.txt",
+                    "entitle-secrets.txt",
                   ),
                 pending.value,
               ),

@@ -85,7 +85,7 @@ than substituting a different framework's target spelling.
 
 | Framework | Feed path                                              | Example integration                                  |
 | --------- | ------------------------------------------------------ | ---------------------------------------------------- |
-| WordPress | `/updates/PRODUCT`                                     | [PHP](../examples/wordpress/double-entitle-example/) |
+| WordPress | `/updates/PRODUCT`                                     | [PHP](../examples/wordpress/entitle-example/) |
 | Joomla    | `/updates/joomla/PRODUCT.xml`                          | [Installer plugin](../examples/joomla/)              |
 | Electron  | `/updates/electron/PRODUCT/TARGET/FILENAME`            | [JavaScript](../examples/electron/)                  |
 | Tauri     | `/updates/tauri/PRODUCT/TARGET/CURRENT_VERSION`        | [Rust](../examples/tauri/)                           |
@@ -161,4 +161,4 @@ storage, signing, installation and relaunch. Keep the updater loaded even if
 optional features fail compatibility checks, so an update can repair them.
 
 [Framework support](platform-support.md) lists server requirements.
-[Verification](verification.md) records tested runtimes and remaining limits.
+[Verification](testing.md#release-checks) records tested runtimes and remaining limits.

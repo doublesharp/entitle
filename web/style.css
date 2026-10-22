@@ -3395,3 +3395,101 @@ td button {
     letter-spacing: 0;
   }
 }
+
+/* Public sales and task-based documentation paths. */
+.home-page .hosting-grid,
+.docs-page .docs-paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.home-page .hosting-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 32px;
+  border: 1px solid #d8e2cf;
+  border-radius: 18px;
+  background: #fff;
+}
+.home-page .hosting-option:first-child {
+  background: #edf2e8;
+}
+.home-page .hosting-option h3 {
+  font-size: 1.5rem;
+  letter-spacing: -0.035em;
+}
+.home-page .hosting-option p,
+.home-page .hosting-option ul {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.home-page .hosting-option .eyebrow {
+  font-size: 0.7rem;
+}
+.home-page .hosting-option ul {
+  padding-left: 20px;
+}
+.home-page .hosting-option li + li {
+  margin-top: 12px;
+}
+.home-page .hosting-option .hosting-cost {
+  margin-top: auto;
+  padding-top: 12px;
+  color: #506249;
+}
+.home-page .hosting-option > a:last-child {
+  font-size: 0.78rem;
+}
+.home-page .home-question {
+  padding: 22px 0;
+  border-bottom: 1px solid #d8e2cf;
+}
+.home-page .home-question summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+}
+.home-page .home-question p {
+  max-width: 780px;
+  color: #506249;
+  font-size: 0.88rem;
+}
+.home-page .home-question > a {
+  font-size: 0.8rem;
+}
+.docs-page .docs-paths {
+  margin: 28px 0 42px;
+  gap: 14px;
+}
+.docs-page .docs-paths a {
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid #d8e2cf;
+  border-radius: 12px;
+  background: #fff;
+}
+.docs-page .docs-paths a:hover {
+  border-color: #56764c;
+  background: #edf2e8;
+}
+.docs-page .docs-paths strong {
+  color: #304a2e;
+}
+.docs-page .docs-paths span {
+  font-size: 0.82rem;
+  color: #506249;
+}
+@media (max-width: 600px) {
+  .home-page .hosting-grid,
+  .docs-page .docs-paths {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .home-page .hosting-option {
+    padding: 24px;
+  }
+}

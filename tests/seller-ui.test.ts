@@ -319,6 +319,51 @@ test("public marketing home explains the workflow and links signup and docs with
   assert.equal(dom.document.querySelector("#server-limits"), null);
   assert.equal(calls.length, 0);
 });
+test("marketing explains hosting choices and points buyers to support without inventing prices", async () => {
+  await mount("/");
+  assert.ok(dom.document.querySelector('nav a[href="/#hosting"]'));
+  const hosting = el("#hosting").textContent;
+  assert.match(hosting, /Hosted service/);
+  assert.match(hosting, /Self-hosted/);
+  assert.match(hosting, /Starter/);
+  assert.match(hosting, /Pro.*webhooks.*bandwidth/is);
+  assert.match(hosting, /shown at checkout/);
+  assert.match(hosting, /No platform subscription or application fee/);
+  assert.doesNotMatch(hosting, /free trial|\$\d|guaranteed|unlimited/i);
+  assert.equal(
+    el('#hosting a.button[href="/seller"]').textContent,
+    "Open seller dashboard",
+  );
+  assert.ok(
+    dom.document.querySelector('#hosting a[href="/docs#self-hosting"]'),
+  );
+  const help = el("#questions");
+  assert.match(help.textContent, /Installed software keeps working/);
+  assert.ok(help.querySelector('a[href="/docs#customer-accounts"]'));
+  assert.ok(
+    dom.document.querySelector('footer a[href="/docs#troubleshooting"]'),
+  );
+  assert.equal(calls.length, 0);
+});
+test("public documentation offers task paths and safe buyer support steps", async () => {
+  await mount("/docs");
+  const paths = [
+    ...el('[aria-label="Choose your documentation path"]').querySelectorAll(
+      "a",
+    ),
+  ];
+  assert.equal(paths.length, 4);
+  for (const link of paths)
+    assert.ok(dom.document.querySelector(link.getAttribute("href")!));
+  const help = el("#troubleshooting");
+  assert.match(help.textContent, /software publisher/);
+  assert.match(help.textContent, /request ID/);
+  assert.match(
+    help.textContent,
+    /Never share.*license key.*activation token/is,
+  );
+  assert.ok(help.querySelector('a[href="#customer-accounts"]'));
+});
 test("marketing navigation targets actual home and documentation sections", async () => {
   await mount("/");
   for (const hash of ["#how-it-works", "#features"])
@@ -739,7 +784,8 @@ test("ZIP publication bounds files before upload and sends metadata and raw byte
   await submit("#release-upload");
   assert.match(text(), /25 MiB/);
   assert.equal(
-    calls.filter((c) => c.path.endsWith("/seller/releases/plugin/1.2.3")).length,
+    calls.filter((c) => c.path.endsWith("/seller/releases/plugin/1.2.3"))
+      .length,
     1,
   );
 });
@@ -1305,7 +1351,9 @@ test("native release upload sends immutable target bytes and signature metadata 
     }
     await input("#release-min-system-version", "13.0");
     await submit("#release-upload");
-    const call = calls.find((c) => c.path.endsWith("/seller/assets/plugin/2.0.0"));
+    const call = calls.find((c) =>
+      c.path.endsWith("/seller/assets/plugin/2.0.0"),
+    );
     assert.ok(call);
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Content-Type"), "application/octet-stream");
@@ -1413,7 +1461,9 @@ test("optional framework identity fields stay absent and native uploads can omit
   await input("#release-target", "linux-custom");
   chooseFile("package.bin", "binary");
   await submit("#release-upload");
-  const call = calls.find((c) => c.path.endsWith("/seller/assets/plugin/1.0.1"))!;
+  const call = calls.find((c) =>
+    c.path.endsWith("/seller/assets/plugin/1.0.1"),
+  )!;
   const metadata = JSON.parse(
     Buffer.from(
       new Headers(call.init.headers).get("X-Release-Metadata")!,

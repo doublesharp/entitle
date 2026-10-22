@@ -4,7 +4,7 @@ import { isolatedDatabase } from "./helpers/database.ts";
 import { up } from "../src/migrations/010_operations.ts";
 
 export async function operationsFixture(run: (db: DB, tenant: Tenant, other: Tenant) => Promise<void>) {
-  const directory = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/operations-case-");
+  const directory = await mkdtemp("/Volumes/Scratch/entitle/tmp/operations-case-");
   const { db, close } = await isolatedDatabase(`sqlite:${directory}/db`);
   try {
     // Exercise our schema against the stable predecessor, independently of

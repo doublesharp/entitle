@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { createDb, migrate, reset, type Plan } from "../src/db.ts";
 import { StripeBilling } from "../src/stripe.ts";
 import { loadConfig } from "../src/config.ts";
-const root = await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/stripe-");
+const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/stripe-");
 const db = createDb(`sqlite:${root}/db`);
 const requests: {
   path: string;

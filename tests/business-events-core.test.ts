@@ -257,7 +257,7 @@ test("WordPress and each native target publication plus withdrawal persist atomi
   businessFixture(async (db) => {
     await merchant(db);
     const root = await mkdtemp(
-      "/Volumes/Scratch/double-entitle-wp/tmp/business-events-publication-",
+      "/Volumes/Scratch/entitle/tmp/business-events-publication-",
     );
     try {
       const store = new InMemoryArtifactStore();

@@ -26,7 +26,7 @@ import { Auth } from "../src/auth.ts";
 import { AppError } from "../src/errors.ts";
 
 process.env.NODE_ENV = "test";
-const scratch = "/Volumes/Scratch/double-entitle-wp/tmp/";
+const scratch = "/Volumes/Scratch/entitle/tmp/";
 const metadata = {
   changelog: "<p>Coverage release</p>",
   minWp: "6.0",

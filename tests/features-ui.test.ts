@@ -479,7 +479,7 @@ test("webhook event selection, signing secret, rotation, deletion and failed ret
   });
   assert.match(dom.document.body.textContent!, /signing-once/);
   await click("Save secrets offline");
-  assert.equal(downloads.at(-1)?.filename, "double-entitle-secrets.txt");
+  assert.equal(downloads.at(-1)?.filename, "entitle-secrets.txt");
   assert.equal(revoked.at(-1), "blob:download");
   await click("I saved these secrets");
   await click("Rotate signing secret");
@@ -598,7 +598,7 @@ test("buyer own-data export creates a JSON download and revokes its object URL",
         : { customer: { email: "buyer@example.test" } };
   await mount("customer");
   await click("Download my account data");
-  assert.equal(downloads.at(-1)?.filename, "double-entitle-account.json");
+  assert.equal(downloads.at(-1)?.filename, "entitle-account.json");
   assert.equal(revoked.at(-1), "blob:download");
 });
 test("panel errors are recoverable and duplicate submissions are blocked", async () => {

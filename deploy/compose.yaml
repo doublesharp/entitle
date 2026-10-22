@@ -1,8 +1,10 @@
+name: entitle
 services:
   app:
-    build: .
+    build:
+      context: ..
     restart: unless-stopped
-    env_file: .env
+    env_file: ../.env
     environment:
       NODE_ENV: production
       LOCAL_BILLING: "false"
@@ -27,7 +29,7 @@ services:
     environment:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN to your HTTPS service origin}
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${ENTITLE_DATA_DIR}/caddy-data:/data
       - ${ENTITLE_DATA_DIR}/caddy-config:/config
     networks:

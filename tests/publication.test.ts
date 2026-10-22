@@ -10,7 +10,7 @@ import { loadConfig } from "../src/config.ts";
 import { Releases } from "../src/releases.ts";
 import { zipBytes } from "./helpers/zip.ts";
 const root = await mkdtemp(
-  "/Volumes/Scratch/double-entitle-wp/tmp/publication-",
+  "/Volumes/Scratch/entitle/tmp/publication-",
 );
 const config = loadConfig({ DEPLOYMENT_MODE: "hosted",
   APP_SECRET: "11".repeat(32),
@@ -143,7 +143,7 @@ test("configured identity also stays fixed after publication and omitted retries
 
 test("migration002 lets a legacy published product bind its actual basename once without direct SQL repair", async () => {
   const legacyRoot = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/legacy-identity-",
+    "/Volumes/Scratch/entitle/tmp/legacy-identity-",
   );
   const legacyDb = createDb(`sqlite:${legacyRoot}/db`);
   let legacyApp: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -196,7 +196,7 @@ test("migration002 lets a legacy published product bind its actual basename once
           plans: [{ name: "One", siteAllowance: 1, priceId: "price_legacy" }],
         },
       });
-    const identity = "double-entitle-example/double-entitle-example.php";
+    const identity = "entitle-example/entitle-example.php";
     const configured = await configure(identity);
     assert.equal(configured.statusCode, 200, configured.body);
     const file = legacyRoot + "/release.zip";

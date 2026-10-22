@@ -8,7 +8,7 @@ import { createWebhookNetwork, OutboundWebhooks, verifyWebhookSignature, type We
 import { operationsFixture } from "./operations-fixtures.test.ts";
 
 test("real TLS loopback receiver observes signed raw bytes and redirect responses never trigger another request",async()=>operationsFixture(async(db,tenant)=>{
-  const directory=await mkdtemp("/Volumes/Scratch/double-entitle-wp/tmp/outbound-tls-");
+  const directory=await mkdtemp("/Volumes/Scratch/entitle/tmp/outbound-tls-");
   execFileSync("/usr/bin/openssl",["req","-x509","-newkey","rsa:2048","-nodes","-keyout",`${directory}/key.pem`,"-out",`${directory}/cert.pem`,"-days","1","-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost"],{stdio:"ignore"});
   const key=await readFile(`${directory}/key.pem`),cert=await readFile(`${directory}/cert.pem`);
   const received:{body:string;headers:Record<string,string|string[]|undefined>}[]=[];let responseStatus=204;

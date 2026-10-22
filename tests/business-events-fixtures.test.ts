@@ -5,7 +5,7 @@ import { up } from "../src/migrations/012_business_events.ts";
 import { OutboundWebhooks } from "../src/outbound-webhooks.ts";
 export async function businessFixture(run: (db: DB) => Promise<void>) {
   const root = await mkdtemp(
-    "/Volumes/Scratch/double-entitle-wp/tmp/business-events-case-",
+    "/Volumes/Scratch/entitle/tmp/business-events-case-",
   );
   const fixture = await isolatedDatabase(`sqlite:${root}/db`);
   try {
