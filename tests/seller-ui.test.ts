@@ -301,6 +301,47 @@ test("hosted dashboard discloses its configured fee separately from Stripe charg
   assert.match(text(), /1% application fee/);
   assert.match(text(), /Stripe.*fees.*separate/i);
 });
+test("unconnected Stripe accounts keep the dashboard and connection action available", async () => {
+  await mount("/seller", () => {
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      denied(409, "Connect a Stripe account first."),
+    );
+    routes.set("POST /api/v1/tenants/alpha/seller/stripe/connect", () =>
+      Response.json({ url: "https://stripe.example.test/connect" }),
+    );
+  });
+  assert.match(text(), /Your workspace in numbers/);
+  assert.match(text(), /Connect a Stripe account first/);
+  await click("Connect Stripe");
+  assert.deepEqual(redirects, ["https://stripe.example.test/connect"]);
+  await click("Products");
+  assert.ok(dom.document.querySelector("#product-create"));
+  assert.equal(
+    el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
+    true,
+  );
+});
+
+test("a temporary price outage preserves workspace data and recovers on refresh", async () => {
+  await mount("/seller", () => {
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      denied(503, "Price provider unavailable."),
+    );
+  });
+  assert.match(text(), /Your workspace in numbers/);
+  assert.match(text(), /Price provider unavailable.*request-ref/);
+  await click("Licenses");
+  assert.match(text(), /buyer@example.test/);
+  routes.delete("GET /api/v1/tenants/alpha/seller/prices");
+  await click("Refresh dashboard");
+  assert.doesNotMatch(text(), /Price provider unavailable/);
+  await click("Products");
+  assert.equal(
+    el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
+    false,
+  );
+});
+
 test("public marketing home explains the workflow and links signup and docs without fetching metrics or limits", async () => {
   await mount("/");
   assert.equal(
@@ -808,6 +849,35 @@ test("request errors retain references, retry works, and session expiry clears o
   await submit("#key-create");
   assert.doesNotMatch(text(), /buyer@example.test/);
   assert.match(text(), /Sign in to sell/);
+});
+
+test("delayed price failures cannot replace authentication errors or a refreshed dashboard", async () => {
+  for (const status of [401, 503]) {
+    let finishPrices!: (response: Response) => void;
+    const pendingPrices = new Promise<Response>((resolve) => {
+      finishPrices = resolve;
+    });
+    await mount("/seller", () => {
+      routes.set("GET /api/v1/tenants/alpha/seller/overview", () =>
+        denied(status, "Critical dashboard failure."),
+      );
+      routes.set(
+        "GET /api/v1/tenants/alpha/seller/prices",
+        () => pendingPrices,
+      );
+    });
+    assert.match(text(), /Critical dashboard failure/);
+    if (status === 503) {
+      routes.delete("GET /api/v1/tenants/alpha/seller/overview");
+      routes.delete("GET /api/v1/tenants/alpha/seller/prices");
+      await click("Refresh dashboard");
+      assert.match(text(), /Your workspace in numbers/);
+    }
+    finishPrices(denied(503, "Obsolete price outage."));
+    await flush();
+    assert.doesNotMatch(text(), /Obsolete price outage/);
+    if (status === 401) assert.match(text(), /Critical dashboard failure/);
+  }
 });
 
 test("docs limits failures are retryable without hiding the setup guide", async () => {

@@ -12,6 +12,7 @@ import { PlatformBilling } from "../src/platform-billing.ts";
 import { StripeBilling } from "../src/stripe.ts";
 import { InMemoryArtifactStore } from "../src/storage.ts";
 import { Releases } from "../src/releases.ts";
+import { Licenses } from "../src/licensing.ts";
 import { Auth } from "../src/auth.ts";
 import { hash, unseal, csrf, seal } from "../src/crypto.ts";
 import type { Message } from "../src/email.ts";
@@ -28,9 +29,7 @@ async function fixture(
   local = true,
   maxBytes = 25 * 1024 * 1024,
 ) {
-  const root = await mkdtemp(
-    "/Volumes/Scratch/entitle/tmp/saas-api-",
-  );
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/saas-api-");
   const config = loadConfig({
     DEPLOYMENT_MODE: "hosted",
     APP_SECRET: "12".repeat(32),
@@ -221,7 +220,11 @@ async function merchant(f: Fixture, slug = "merchant") {
     exempt: 1,
   });
 }
-async function commerce(f: Fixture, tenant: Tenant = primaryTenant) {
+async function commerce(
+  f: Fixture,
+  tenant: Tenant = primaryTenant,
+  activate = true,
+) {
   const productId = randomUUID(),
     planId = randomUUID(),
     customerId = randomUUID(),
@@ -282,13 +285,15 @@ async function commerce(f: Fixture, tenant: Tenant = primaryTenant) {
     minFree: "0.0.0",
     tested: "7.0",
   });
-  const activated = await f.post(`/api/v1/tenants/${tenant.slug}/activate`, {
-    key: licenseKey,
-    installationId: "installation-001",
-    siteUrl: "https://buyer.example.test",
-    product: "plugin",
-  });
-  assert.equal(activated.statusCode, 200, activated.body);
+  const activated = activate
+    ? await f.post(`/api/v1/tenants/${tenant.slug}/activate`, {
+        key: licenseKey,
+        installationId: "installation-001",
+        siteUrl: "https://buyer.example.test",
+        product: "plugin",
+      })
+    : null;
+  if (activated) assert.equal(activated.statusCode, 200, activated.body);
   const sessionToken = `buyer-${randomUUID()}`;
   await f.db("sessions").insert({
     tenant_id: tenant.id,
@@ -311,9 +316,304 @@ async function commerce(f: Fixture, tenant: Tenant = primaryTenant) {
     release,
     bytes,
     browser,
-    token: activated.json().token as string,
+    token: activated ? (activated.json().token as string) : "",
   };
 }
+
+async function readGraph(f: Fixture) {
+  const purchase = await commerce(f);
+  const otherTenant = await merchant(f, "other-reads");
+  await commerce(f, otherTenant);
+  const originalPlan = await f
+    .db("plans")
+    .where({ id: purchase.planId })
+    .first();
+  const originalLicense = await f
+    .db("licenses")
+    .where({ id: purchase.licenseId })
+    .first();
+  const productIds = [purchase.productId];
+  for (let index = 1; index <= 3; index++) {
+    const productId = randomUUID(),
+      planId = randomUUID(),
+      licenseId = randomUUID();
+    productIds.push(productId);
+    await f.db("products").insert({
+      tenant_id: "primary",
+      id: productId,
+      slug: `native-${index}`,
+      name: `Native ${index}`,
+      framework: "generic",
+      framework_config: JSON.stringify({ activationKind: "device" }),
+    });
+    await f.db("plans").insert({
+      ...originalPlan,
+      id: planId,
+      product_id: productId,
+      stripe_price_id: `price_native_${index}`,
+    });
+    await f.db("licenses").insert({
+      ...originalLicense,
+      id: licenseId,
+      product_id: productId,
+      plan_id: planId,
+      subscription_id: `sub_native_${index}`,
+      key_hash: hash(`native-${index}`),
+    });
+    await f.db("installations").insert({
+      tenant_id: "primary",
+      id: randomUUID(),
+      license_id: licenseId,
+      installation_id: `device-${index}`,
+      site_url: `device:device-${index}`,
+      label: `Computer ${index}`,
+      active: 1,
+      exempt: 0,
+      token_hash: hash(`device-${index}`),
+      token_cipher: "",
+    });
+    for (const version of ["1.0.0", "2.0.0", "3.0.0", "4.0.0"]) {
+      const releaseId = randomUUID();
+      await f.db("releases").insert({
+        tenant_id: "primary",
+        id: releaseId,
+        product_id: productId,
+        version,
+        changelog: version,
+        published_at:
+          version === "4.0.0" ? Date.now() + 86400000 : Date.now() - 1000,
+        withdrawn: version === "3.0.0" ? 1 : 0,
+        checksum: "a".repeat(64),
+        size: 20,
+        min_wp: "",
+        min_php: "",
+        min_free: "",
+        tested: "",
+      });
+      for (const target of ["linux-x64", "windows-x64"])
+        await f.db("release_assets").insert({
+          tenant_id: "primary",
+          id: randomUUID(),
+          release_id: releaseId,
+          target,
+          filename: "app.bin",
+          size: 10,
+          checksum: "a".repeat(64),
+          sha512: Buffer.alloc(64).toString("base64"),
+          signature: null,
+          min_system_version: null,
+        });
+    }
+  }
+  await f.db("products").insert({
+    tenant_id: "primary",
+    id: "no-plans",
+    slug: "no-plans",
+    name: "Coming soon",
+  });
+  const customerId = randomUUID();
+  await f.db("customers").insert({
+    tenant_id: "primary",
+    id: customerId,
+    email: "another@example.test",
+  });
+  await f.db("licenses").insert({
+    ...originalLicense,
+    id: "another-customers-license",
+    customer_id: customerId,
+    subscription_id: "sub_another",
+    key_hash: hash("another-key"),
+  });
+  return { purchase, productIds };
+}
+
+async function measureReads(
+  f: Fixture,
+  url: string,
+  headers: Record<string, string> = {},
+) {
+  const selects = new Map<string, number>();
+  const record = ({ sql }: { sql: string }) => {
+    const table = /^select\b.*?\bfrom ["`]?([a-z_]+)/i.exec(sql)?.[1];
+    if (table) selects.set(table, (selects.get(table) ?? 0) + 1);
+  };
+  f.db.on("query", record);
+  try {
+    const response = await f.app.inject({ url, headers });
+    assert.equal(response.statusCode, 200, response.body);
+    return { response, selects };
+  } finally {
+    f.db.off("query", record);
+  }
+}
+
+test("catalog reads plans once while preserving product and tenant boundaries", async (t) => {
+  const f = await fixture(t);
+  const { productIds } = await readGraph(f);
+  const { response, selects } = await measureReads(f, `${prefix}/catalog`);
+  const products = response.json().products;
+  assert.equal(products.length, productIds.length + 1);
+  for (const product of products) {
+    assert.equal(product.framework_config, undefined);
+    assert.equal(product.plans.length, product.id === "no-plans" ? 0 : 1);
+    if (product.plans.length) assert.equal(product.plans[0].site_allowance, 1);
+  }
+  t.diagnostic(JSON.stringify(Object.fromEntries(selects)));
+  assert.equal(selects.get("plans"), 1);
+});
+
+test("seller overview batches plans and assets for all owned products and releases", async (t) => {
+  const f = await fixture(t);
+  const { productIds } = await readGraph(f);
+  const key = await f.key();
+  const { response, selects } = await measureReads(
+    f,
+    `${prefix}/seller/overview`,
+    key.headers,
+  );
+  const data = response.json();
+  assert.equal(data.products.length, productIds.length + 1);
+  assert.equal(data.licenses.length, productIds.length + 1);
+  assert.equal(data.releases.length, 13);
+  for (const release of data.releases) {
+    assert.equal(
+      release.assets.length,
+      release.product_id === productIds[0] ? 0 : 2,
+    );
+    for (const asset of release.assets) {
+      assert.equal(asset.tenant_id, "primary");
+      assert.equal(asset.release_id, release.id);
+    }
+  }
+  t.diagnostic(JSON.stringify(Object.fromEntries(selects)));
+  assert.equal(selects.get("plans"), 1);
+  assert.equal(selects.get("release_assets"), 1);
+});
+
+test("buyer account batches related rows without exposing hidden releases or other customers", async (t) => {
+  const f = await fixture(t);
+  const { purchase, productIds } = await readGraph(f);
+  const { response, selects } = await measureReads(
+    f,
+    `${prefix}/me`,
+    purchase.browser,
+  );
+  const data = response.json();
+  assert.equal(data.customer.id, purchase.customerId);
+  assert.equal(data.licenses.length, productIds.length);
+  for (const license of data.licenses) {
+    assert.ok(productIds.includes(license.product_id));
+    assert.notEqual(license.id, "another-customers-license");
+    assert.equal(license.site_allowance, 1);
+    assert.equal(license.entitled, true);
+    assert.equal(license.installations.length, 1);
+    assert.equal(license.installations[0].active, true);
+    assert.equal(
+      license.releases.length,
+      license.product_id === purchase.productId ? 1 : 2,
+    );
+    for (const release of license.releases) {
+      assert.ok(["1.0.0", "2.0.0"].includes(release.version));
+      assert.equal(
+        release.assets.length,
+        license.product_id === purchase.productId ? 0 : 2,
+      );
+      for (const asset of release.assets) {
+        assert.equal(asset.tenant_id, "primary");
+        assert.equal(asset.release_id, release.id);
+      }
+    }
+  }
+  t.diagnostic(JSON.stringify(Object.fromEntries(selects)));
+  for (const table of [
+    "products",
+    "plans",
+    "installations",
+    "releases",
+    "release_assets",
+  ])
+    assert.equal(
+      selects.get(table),
+      1,
+      `${table} reads should not grow per license or release`,
+    );
+});
+
+test("buyer account lists no installations until the first site activation", async (t) => {
+  const f = await fixture(t);
+  const purchase = await commerce(f, primaryTenant, false);
+  const before = await f.app.inject({
+    url: `${prefix}/me`,
+    headers: purchase.browser,
+  });
+  assert.equal(before.statusCode, 200, before.body);
+  assert.equal(before.json().licenses[0].id, purchase.licenseId);
+  assert.equal(before.json().licenses[0].entitled, true);
+  assert.deepEqual(before.json().licenses[0].installations, []);
+  const activated = await f.post(`${prefix}/activate`, {
+    key: purchase.licenseKey,
+    installationId: "first-installation",
+    siteUrl: "https://first.example.test",
+    product: "plugin",
+  });
+  assert.equal(activated.statusCode, 200, activated.body);
+  const after = await f.app.inject({
+    url: `${prefix}/me`,
+    headers: purchase.browser,
+  });
+  assert.equal(after.statusCode, 200, after.body);
+  const installations = after.json().licenses[0].installations;
+  assert.equal(installations.length, 1);
+  assert.equal(installations[0].installation_id, "first-installation");
+  assert.equal(installations[0].active, true);
+  assert.equal(installations[0].license_id, undefined);
+});
+
+test("buyer account includes a paid plan created during effective license projection", async (t) => {
+  const f = await fixture(t);
+  const purchase = await commerce(f);
+  const original = Licenses.prototype.effective;
+  let upgraded = false;
+  t.mock.method(
+    Licenses.prototype,
+    "effective",
+    async function (
+      this: Licenses,
+      ...args: Parameters<Licenses["effective"]>
+    ) {
+      if (!upgraded && args[0].id === purchase.licenseId) {
+        upgraded = true;
+        const now = Date.now();
+        await f.db("plans").insert({
+          tenant_id: "primary",
+          id: "concurrent-upgrade",
+          product_id: purchase.productId,
+          name: "Five seats",
+          site_allowance: 5,
+          stripe_price_id: "price_upgrade",
+        });
+        await f.db("grants").insert({
+          tenant_id: "primary",
+          id: "upgrade-grant",
+          license_id: purchase.licenseId,
+          plan_id: "concurrent-upgrade",
+          invoice_id: "upgrade-invoice",
+          period_start: now - 1000,
+          period_end: now + 86400000,
+          paid_at: now,
+        });
+      }
+      return original.apply(this, args);
+    },
+  );
+  const response = await f.app.inject({
+    url: `${prefix}/me`,
+    headers: purchase.browser,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().licenses[0].plan_name, "Five seats");
+  assert.equal(response.json().licenses[0].site_allowance, 5);
+});
 
 test("public catalog requires an explicit tenant namespace and platform info exposes verified capabilities", async (t) => {
   const f = await fixture(t);
@@ -1148,7 +1448,9 @@ test("seller OAuth callback binds the browser session and redirects only after c
     async () => ({ url: "https://billing.stripe.test/platform" }),
   );
   t.mock.method(f.platform.stripe.billingPortal.configurations, "list", () =>
-    (async function*(){ yield* []; })(),
+    (async function* () {
+      yield* [];
+    })(),
   );
   t.mock.method(
     f.platform.stripe.billingPortal.configurations,
@@ -1160,7 +1462,7 @@ test("seller OAuth callback binds the browser session and redirects only after c
     "retrieve",
     async () => ({
       id: "bpc_api_safe",
-      metadata: {double_entitle_policy:"period_end_v1"},
+      metadata: { double_entitle_policy: "period_end_v1" },
       default_return_url: `${f.config.origin}/seller`,
       active: true,
       is_default: false,
