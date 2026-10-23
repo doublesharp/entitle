@@ -27,7 +27,7 @@ function bad(...args) {
 async function fixture(t) {
   await fs.access("/Volumes/Scratch");
   await fs.mkdir(scratch, { recursive: true });
-  const dir = await fs.mkdtemp(path.join(scratch, "case-"));
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(scratch, "case-")));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const input = path.join(dir, "web");
   const root = path.join(dir, "root");
@@ -1163,3 +1163,230 @@ proxy_set_header Forwarded "host=attacker.example;proto=http";
     assert.notEqual(write.status, 0);
   },
 );
+
+const pruneArgs = (root, ...extra) => [
+  "prune",
+  "--root",
+  root,
+  "--keep",
+  "20",
+  "--minimum-age-days",
+  "30",
+  "--apply",
+  "false",
+  ...extra,
+];
+async function retentionFixture(t, count = 24, retiredAsset = false) {
+  const f = await fixture(t);
+  const releases = [];
+  for (let i = 0; i < count; i++) {
+    if (retiredAsset && i === 0)
+      await fs.writeFile(
+        path.join(f.input, "assets/retired.js"),
+        "retired asset",
+      );
+    if (retiredAsset && i === 1)
+      await fs.unlink(path.join(f.input, "assets/retired.js"));
+    await fs.writeFile(path.join(f.input, "index.html"), `release ${i}`);
+    const release = f.pack(`release-${i}.tar`);
+    f.activate(release);
+    const date = new Date(Date.now() - (100 - i) * 86400000);
+    await fs.utimes(
+      path.join(f.root, "releases", release.releaseId),
+      date,
+      date,
+    );
+    releases.push(release.releaseId);
+  }
+  return { ...f, releases };
+}
+
+test("prune dry-run and apply preserve newest twenty, old current, recent and protected rollback releases", async (t) => {
+  const f = await retentionFixture(t, 25);
+  ok("rollback", "--root", f.root, "--release", f.releases[0]);
+  const recent = path.join(f.root, "releases", f.releases[1]);
+  await fs.utimes(recent, new Date(), new Date());
+  const args = pruneArgs(f.root, "--protect-release", f.releases[2]);
+  const plan = ok(...args);
+  assert.equal(plan.dryRun, true);
+  assert.deepEqual(plan.deleteReleases.sort(), f.releases.slice(3, 6).sort());
+  assert.equal((await fs.readdir(path.join(f.root, "releases"))).length, 25);
+  args[args.indexOf("--apply") + 1] = "true";
+  const applied = ok(...args);
+  assert.equal(applied.dryRun, false);
+  assert.deepEqual(
+    (await fs.readdir(path.join(f.root, "releases"))).sort(),
+    f.releases.filter((_, i) => i !== 3 && i !== 4 && i !== 5).sort(),
+  );
+  assert.equal(
+    await fs.readlink(path.join(f.root, "current")),
+    `releases/${f.releases[0]}`,
+  );
+});
+
+test("prune retains referenced assets and young orphans while removing old unreferenced assets", async (t) => {
+  const f = await retentionFixture(t, 21, true);
+  const pool = path.join(f.root, "shared/assets");
+  const old = new Date(Date.now() - 90 * 86400000);
+  for (const name of [
+    "app-one.js",
+    "orphan-old.js",
+    "orphan-young.js",
+    "retired.js",
+  ]) {
+    if (!["app-one.js", "retired.js"].includes(name))
+      await fs.writeFile(path.join(pool, name), name);
+    if (name !== "orphan-young.js")
+      await fs.utimes(path.join(pool, name), old, old);
+  }
+  const args = pruneArgs(f.root);
+  const planned = ok(...args);
+  assert.deepEqual(planned.deleteAssets, ["orphan-old.js", "retired.js"]);
+  assert.equal(
+    await fs.readFile(path.join(pool, "orphan-old.js"), "utf8"),
+    "orphan-old.js",
+  );
+  args[args.indexOf("--apply") + 1] = "true";
+  ok(...args);
+  assert.deepEqual((await fs.readdir(pool)).sort(), [
+    "app-one.js",
+    "orphan-young.js",
+  ]);
+});
+
+test("prune refuses weak policy, missing protections and traversal before deleting anything", async (t) => {
+  const f = await retentionFixture(t, 1);
+  for (const [flag, value] of [
+    ["--keep", "19"],
+    ["--minimum-age-days", "29"],
+    ["--apply", "yes"],
+    ["--root", `${f.root}/../root`],
+  ]) {
+    const args = pruneArgs(f.root);
+    args[args.indexOf(flag) + 1] = value;
+    assert.equal(cli(...args).status, 1);
+  }
+  assert.equal(
+    cli(...pruneArgs(f.root, "--protect-release", "../current")).status,
+    1,
+  );
+  assert.equal(
+    cli(...pruneArgs(f.root, "--protect-release", `${sha}-${"0".repeat(64)}`))
+      .status,
+    1,
+  );
+  assert.equal((await fs.readdir(path.join(f.root, "releases"))).length, 1);
+});
+
+test("prune fails closed on unsafe inventory before removing any candidate", async (t) => {
+  const seed = await retentionFixture(t, 21);
+  for (const sabotage of [
+    "extra",
+    "symlink",
+    "manifest",
+    "current",
+    "asset",
+    "missing-asset",
+    "shared",
+    "root-link",
+    "empty-directory",
+    "writable-root",
+    "writable-asset",
+    "writable-release-file",
+    "corrupt-asset",
+    "release-link",
+  ]) {
+    await t.test(sabotage, async (t) => {
+      const f = { ...(await fixture(t)), releases: seed.releases };
+      await fs.cp(seed.root, f.root, {
+        recursive: true,
+        verbatimSymlinks: true,
+      });
+      for (const id of f.releases) {
+        const info = await fs.stat(path.join(seed.root, "releases", id));
+        await fs.utimes(
+          path.join(f.root, "releases", id),
+          info.atime,
+          info.mtime,
+        );
+      }
+      assert.deepEqual(ok(...pruneArgs(f.root)).deleteReleases, [
+        f.releases[0],
+      ]);
+      const release = path.join(f.root, "releases", f.releases[20]);
+      let root = f.root;
+      if (sabotage === "writable-root") await fs.chmod(f.root, 0o777);
+      if (sabotage === "writable-asset")
+        await fs.chmod(path.join(f.root, "shared/assets/app-one.js"), 0o666);
+      if (sabotage === "writable-release-file")
+        await fs.chmod(path.join(release, "index.html"), 0o666);
+      if (sabotage === "release-link") {
+        await fs.rm(release, { recursive: true });
+        await fs.symlink(f.input, release);
+      }
+      if (sabotage === "corrupt-asset") {
+        await fs.chmod(path.join(f.root, "shared/assets/app-one.js"), 0o644);
+        await fs.writeFile(
+          path.join(f.root, "shared/assets/app-one.js"),
+          "corrupt",
+        );
+      }
+      if (sabotage === "extra")
+        await fs.writeFile(path.join(f.root, "unexpected"), "keep me");
+      if (sabotage === "symlink")
+        await fs.symlink(f.input, path.join(f.root, "releases/foreign"));
+      if (sabotage === "manifest") {
+        await fs.chmod(path.join(release, "release-manifest.json"), 0o644);
+        await fs.writeFile(path.join(release, "release-manifest.json"), "{}");
+      }
+      if (sabotage === "empty-directory")
+        await fs.mkdir(path.join(release, "unlisted"));
+      if (sabotage === "current") {
+        await fs.unlink(path.join(f.root, "current"));
+        await fs.symlink(f.input, path.join(f.root, "current"));
+      }
+      if (sabotage === "asset")
+        await fs.symlink(
+          path.join(f.input, "index.html"),
+          path.join(f.root, "shared/assets/evil.js"),
+        );
+      if (sabotage === "missing-asset")
+        await fs.unlink(path.join(f.root, "shared/assets/app-one.js"));
+      if (sabotage === "shared")
+        await fs.writeFile(path.join(f.root, "shared/foreign"), "keep me");
+      if (sabotage === "root-link") {
+        root = path.join(f.dir, "root-link");
+        await fs.symlink(f.root, root);
+      }
+      const args = pruneArgs(root);
+      args[args.indexOf("--apply") + 1] = "true";
+      assert.equal(cli(...args).status, 1);
+      assert.equal(
+        (await fs.readdir(path.join(f.root, "releases"))).includes(
+          f.releases[0],
+        ),
+        true,
+      );
+    });
+  }
+});
+
+test("prune refuses an occupied publication lock promptly and leaves it intact", async (t) => {
+  const f = await retentionFixture(t, 1);
+  const lock = path.join(f.root, ".frontend-release.lock");
+  await fs.mkdir(lock);
+  await fs.writeFile(
+    path.join(lock, "owner.json"),
+    JSON.stringify({ pid: process.pid }),
+  );
+  const result = spawnSync(process.execPath, [tool, ...pruneArgs(f.root)], {
+    encoding: "utf8",
+    timeout: 1500,
+  });
+  assert.equal(result.status, 1, `${result.error}`);
+  assert.match(result.stderr, /lock/i);
+  assert.equal(
+    JSON.parse(await fs.readFile(path.join(lock, "owner.json"))).pid,
+    process.pid,
+  );
+});

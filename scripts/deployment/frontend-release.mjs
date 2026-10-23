@@ -3,7 +3,8 @@
 // Limits: 10,000 files, 64 MiB/file, 192 MiB payload, 256 MiB archive.
 // A single host account must own root and its ancestors. Do not share writable
 // release storage with the runtime or untrusted users. The mkdir lock serializes
-// activate/rollback for up to 60 seconds; a crash leaves it fail-closed. An operator
+// activate/rollback/prune. Publication waits up to 60 seconds; prune refuses
+// an occupied lock immediately; a crash leaves it fail-closed. An operator
 // may remove .frontend-release.lock only after checking owner.json and confirming
 // that its process is no longer running. Never remove a live process's lock.
 import * as fs from "node:fs/promises";
@@ -324,7 +325,7 @@ async function parents(base, relative) {
     await directory(current);
   }
 }
-async function withLock(root, operation) {
+async function withLock(root, operation, wait = true) {
   await fs.mkdir(root, { recursive: true });
   await directory(root);
   const lock = path.join(root, ".frontend-release.lock");
@@ -335,7 +336,7 @@ async function withLock(root, operation) {
       break;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      if (Date.now() >= deadline)
+      if (!wait || Date.now() >= deadline)
         fail(
           "Release lock timed out; inspect .frontend-release.lock/owner.json",
         );
@@ -496,6 +497,220 @@ async function rollback(root, releaseId) {
   });
 }
 
+// Pruning accepts only an existing, private publication tree. In particular it
+// must never create a root merely because an operator misspelled its path.
+async function pruneRoot(root) {
+  if (!path.isAbsolute(root) || path.normalize(root) !== root || root === "/")
+    fail("Unsafe prune root");
+  let current = "/";
+  for (const segment of root.split("/").filter(Boolean)) {
+    current = path.join(current, segment);
+    const info = await fs.lstat(current);
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      (info.uid !== 0 && info.uid !== process.getuid()) ||
+      info.mode & 0o022
+    )
+      fail("Unsafe prune root ancestry");
+  }
+  const info = await fs.lstat(root);
+  if (info.uid !== process.getuid())
+    fail("Prune root must be owned by publisher");
+}
+
+async function prune(root, keep, minimumAgeDays, apply, protectedIds) {
+  const integer = (value, minimum, maximum) =>
+    /^[1-9][0-9]*$/.test(value) &&
+    Number.isSafeInteger(Number(value)) &&
+    Number(value) >= minimum &&
+    Number(value) <= maximum;
+  if (
+    !integer(keep, 20, MAX_FILES) ||
+    !integer(minimumAgeDays, 30, 36500) ||
+    !["true", "false"].includes(apply)
+  )
+    fail("Invalid prune policy or apply flag");
+  if (
+    protectedIds.length > MAX_FILES ||
+    protectedIds.some((id) => !RELEASE.test(id))
+  )
+    fail("Invalid protected release IDs");
+  await pruneRoot(root);
+  return withLock(
+    root,
+    async () => {
+      await pruneRoot(root);
+      const entries = (await fs.readdir(root)).sort(compare);
+      if (
+        JSON.stringify(entries) !==
+        JSON.stringify([
+          ".frontend-release.lock",
+          "current",
+          "releases",
+          "shared",
+        ])
+      )
+        fail("Unexpected publication root entries");
+      async function storedDirectory(dir) {
+        const info = await fs.lstat(dir);
+        if (
+          !info.isDirectory() ||
+          info.isSymbolicLink() ||
+          info.uid !== process.getuid() ||
+          info.mode & 0o022
+        )
+          fail("Unsafe prune directory");
+        return info;
+      }
+      const releases = path.join(root, "releases");
+      const shared = path.join(root, "shared");
+      const pool = path.join(shared, "assets");
+      await storedDirectory(releases);
+      await storedDirectory(shared);
+      await storedDirectory(pool);
+      if (
+        JSON.stringify(await fs.readdir(shared)) !== JSON.stringify(["assets"])
+      )
+        fail("Unexpected shared entries");
+      const link = path.join(root, "current");
+      if (!(await fs.lstat(link)).isSymbolicLink())
+        fail("current must be a symlink");
+      const target = await fs.readlink(link);
+      if (!/^releases\/[a-f0-9]{40}-[a-f0-9]{64}$/.test(target))
+        fail("Unsafe current target");
+      const currentId = target.slice(9);
+      const names = (await fs.readdir(releases)).sort(compare);
+      if (
+        !names.length ||
+        names.length > MAX_FILES ||
+        names.some((id) => !RELEASE.test(id))
+      )
+        fail("Invalid release inventory");
+      if (![currentId, ...protectedIds].every((id) => names.includes(id)))
+        fail("Current or protected release missing");
+      const inventory = [];
+      for (const id of names) {
+        const dir = path.join(releases, id);
+        const info = await storedDirectory(dir);
+        const manifest = await checkRelease(dir, id);
+        // Empty and unlisted directories are unexpected too, even if the files
+        // alone happen to match the manifest.
+        async function directories(base, prefix = "") {
+          for (const name of await fs.readdir(base)) {
+            const relative = prefix ? `${prefix}/${name}` : name;
+            if (relative !== MANIFEST) safePath(relative);
+            const child = path.join(base, name);
+            const stat = await fs.lstat(child);
+            if (stat.uid !== process.getuid() || stat.mode & 0o022)
+              fail("Unsafe stored release ownership or permissions");
+            if (stat.isDirectory()) {
+              await storedDirectory(child);
+              if (
+                !manifest.files.some((file) =>
+                  file.path.startsWith(`${relative}/`),
+                )
+              )
+                fail("Unlisted release directory");
+              await directories(child, relative);
+            }
+          }
+        }
+        await directories(dir);
+        inventory.push({ id, mtime: info.mtimeMs, manifest });
+      }
+      const cutoff = Date.now() - Number(minimumAgeDays) * 86400000;
+      inventory.sort((a, b) => b.mtime - a.mtime || compare(a.id, b.id));
+      const retained = new Set([
+        currentId,
+        ...protectedIds,
+        ...inventory.slice(0, Number(keep)).map((item) => item.id),
+      ]);
+      for (const item of inventory)
+        if (item.mtime >= cutoff) retained.add(item.id);
+      const referenced = new Map();
+      for (const item of inventory.filter((item) => retained.has(item.id))) {
+        for (const file of item.manifest.files.filter((file) =>
+          file.path.startsWith("assets/"),
+        )) {
+          const name = file.path.slice(7);
+          if (
+            referenced.has(name) &&
+            referenced.get(name).sha256 !== file.sha256
+          )
+            fail("Conflicting retained asset provenance");
+          referenced.set(name, file);
+        }
+      }
+      const assets = [];
+      let assetCount = 0;
+      async function assetTree(base, prefix = "") {
+        for (const name of (await fs.readdir(base)).sort(compare)) {
+          if (++assetCount > MAX_FILES) fail("Asset inventory limit exceeded");
+          const relative = prefix ? `${prefix}/${name}` : name;
+          safePath(relative);
+          const child = path.join(base, name);
+          const info = await fs.lstat(child);
+          if (info.isSymbolicLink()) fail("Unsafe asset entry");
+          if (info.isDirectory()) {
+            await storedDirectory(child);
+            await assetTree(child, relative);
+          } else {
+            if (
+              !info.isFile() ||
+              info.nlink !== 1 ||
+              info.uid !== process.getuid() ||
+              info.mode & 0o022
+            )
+              fail("Unsafe asset entry");
+            const bytes = await readRegular(child, MAX_FILE);
+            const reference = referenced.get(relative);
+            if (
+              reference &&
+              (reference.size !== bytes.length ||
+                reference.sha256 !== hash(bytes))
+            )
+              fail("Retained asset checksum mismatch");
+            assets.push({ name: relative, mtime: info.mtimeMs });
+          }
+        }
+      }
+      await assetTree(pool);
+      if (
+        [...referenced.keys()].some(
+          (name) => !assets.some((asset) => asset.name === name),
+        )
+      )
+        fail("Missing retained asset");
+      const result = {
+        dryRun: apply === "false",
+        currentRelease: currentId,
+        retainedReleases: [...retained].sort(compare),
+        deleteReleases: inventory
+          .filter((item) => !retained.has(item.id))
+          .map((item) => item.id)
+          .sort(compare),
+        deleteAssets: assets
+          .filter(
+            (asset) => !referenced.has(asset.name) && asset.mtime < cutoff,
+          )
+          .map((asset) => asset.name)
+          .sort(compare),
+      };
+      // The complete release and asset inventory has passed before the first delete.
+      // Storage is writable only by this publisher; the same lock guards all writers.
+      if (!result.dryRun) {
+        for (const id of result.deleteReleases)
+          await fs.rm(path.join(releases, id), { recursive: true });
+        for (const name of result.deleteAssets)
+          await fs.unlink(path.join(pool, name));
+      }
+      return result;
+    },
+    false,
+  );
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   const flags = {};
@@ -504,23 +719,40 @@ async function main() {
     verify: ["archive", "sha256"],
     activate: ["archive", "sha256", "root"],
     rollback: ["root", "release"],
+    prune: ["root", "keep", "minimum-age-days", "apply", "protect-release"],
   }[command];
   if (!allowed)
-    fail("Usage: frontend-release.mjs pack|verify|activate|rollback [flags]");
+    fail(
+      "Usage: frontend-release.mjs pack|verify|activate|rollback|prune [flags]",
+    );
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index].slice(2);
     if (
       !args[index].startsWith("--") ||
       !allowed.includes(name) ||
-      flags[name] ||
+      (flags[name] && name !== "protect-release") ||
       !args[index + 1] ||
       args[index + 1].startsWith("--")
     )
       fail("Unknown, duplicate or missing CLI flag");
-    flags[name] = args[index + 1];
+    if (name === "protect-release") (flags[name] ??= []).push(args[index + 1]);
+    else flags[name] = args[index + 1];
   }
-  if (allowed.some((name) => !flags[name]))
-    fail(`Required flags: ${allowed.map((name) => `--${name}`).join(" ")}`);
+  if (allowed.some((name) => name !== "protect-release" && !flags[name]))
+    fail(
+      `Required flags: ${allowed
+        .filter((name) => name !== "protect-release")
+        .map((name) => `--${name}`)
+        .join(" ")}`,
+    );
+  if (command === "prune")
+    return prune(
+      flags.root,
+      flags.keep,
+      flags["minimum-age-days"],
+      flags.apply,
+      flags["protect-release"] ?? [],
+    );
   if (command === "pack")
     return pack(flags.input, flags.output, flags["source-sha"]);
   if (command === "verify") {
