@@ -4,5 +4,5 @@ export const site = Object.freeze({
   name,
   hostedOrigin: "https://entitle.doublesharp.com",
   tagline: "Software licensing and updates",
-  description: `Software licensing, subscriptions and private updates for independent developers. Connect your own Stripe account with ${name}.`,
+  description: `Software licensing, subscriptions and private updates for independent developers. Sell your software and manage customer access with ${name}.`,
 });

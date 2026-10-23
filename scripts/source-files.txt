@@ -266,6 +266,16 @@ web/features.ts
 web/frameworks.ts
 web/index.html
 web/main.ts
+web/metadata.test.ts
+web/metadata.ts
 web/public/favicon.svg
+web/public/social/customer.png
+web/public/social/customer.svg
+web/public/social/docs.png
+web/public/social/docs.svg
+web/public/social/home.png
+web/public/social/home.svg
+web/public/social/seller.png
+web/public/social/seller.svg
 web/site.ts
 web/style.css
