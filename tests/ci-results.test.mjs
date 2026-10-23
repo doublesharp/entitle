@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateCiResults} from '../scripts/deployment/check-ci-results.mjs';
+const base=()=>Object.fromEntries(['changes','server-checks','frontend','server-image','web-runtime'].map(k=>[k,{result:'success'}]));
+test('successful main CI is promotable',()=>assert.doesNotThrow(()=>validateCiResults(base(),'push')));
+test('a skipped cached server check and PR image jobs are valid',()=>{const r=base();r.changes.outputs={server:'false'};for(const k of ['server-checks','server-image','web-runtime'])r[k].result='skipped';assert.doesNotThrow(()=>validateCiResults(r,'pull_request'));});
+test('failed and cancelled predecessors cannot produce a green required check',()=>{for(const key of Object.keys(base()))for(const result of ['failure','cancelled']){const r=base();r[key].result=result;assert.throws(()=>validateCiResults(r,'push'),new RegExp(key));}});
+test('frontend and main image jobs must run successfully',()=>{for(const key of ['changes','frontend','server-image','web-runtime']){const r=base();r[key].result='skipped';assert.throws(()=>validateCiResults(r,'workflow_dispatch'),new RegExp(key));}});
+test('missing jobs and unsupported events fail closed',()=>{const r=base();delete r.frontend;assert.throws(()=>validateCiResults(r,'push'));assert.throws(()=>validateCiResults(base(),'workflow_run'));});
+test('an unexplained skipped backend check is rejected',()=>{const r=base();r['server-checks'].result='skipped';assert.throws(()=>validateCiResults(r,'pull_request'),/server-checks/);});
