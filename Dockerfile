@@ -23,7 +23,7 @@ RUN node scripts/build-server.ts
 RUN pnpm --filter @entitle/server deploy --legacy --prod /runtime
 
 FROM node:26.12.0-bookworm-slim
-ENV NODE_ENV=production PORT=3211 WEB_DIR=/app/web DATA_DIR=/data
+ENV NODE_ENV=production PORT=3211 WEB_DIR=/app/web DATA_DIR=/data SERVER_ROLE=all
 WORKDIR /app
 RUN mkdir -p /data && chown node:node /data
 COPY --from=build --chown=node:node /runtime/node_modules ./node_modules
