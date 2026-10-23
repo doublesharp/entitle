@@ -643,7 +643,7 @@ test("Portal uses server-selected customer and reconciliation discovers all subs
   assert.equal(requests[0]!.body.get("customer"), "cus_owned");
   assert.equal(
     requests[0]!.body.get("return_url"),
-    `${config.origin}/t/primary`,
+    `${config.origin}/app/t/primary`,
   );
   routes.set("GET /v1/subscriptions", (r) =>
     r.query.has("starting_after")

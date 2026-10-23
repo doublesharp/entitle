@@ -25,7 +25,9 @@
     "start": "node --env-file-if-exists=.env scripts/start.ts",
     "maintenance": "node --env-file-if-exists=.env src/maintenance-cli.ts",
     "build:server": "pnpm --filter @entitle/server build",
-    "build:web": "pnpm --filter @entitle/web build"
+    "build:web": "pnpm --filter @entitle/web build",
+    "build:marketing": "pnpm --filter @entitle/marketing build",
+    "build:hosted-web": "node scripts/build-hosted-web.ts"
   },
   "devDependencies": {
     "@0xdoublesharp/adaptive-cache": "0.2.1",

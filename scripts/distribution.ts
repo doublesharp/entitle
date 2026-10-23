@@ -137,11 +137,11 @@ export async function packageSource(root: string, webOutput: string) {
 }
 
 /** Preserve license text for every npm package whose code enters the browser bundle. */
-export async function browserNotices(moduleIds: string[], root: string) {
+export async function browserNotices(moduleIds: string[], root: string, packagePath = "apps/web/package.json") {
   const packages = new Set<string>();
   for (const id of [
     ...moduleIds,
-    createRequire(join(root, "apps/web/package.json")).resolve("vite"),
+    createRequire(join(root, packagePath)).resolve("vite"),
   ]) {
     if (!id.includes("node_modules/") || id.includes("\0")) continue;
     let directory = dirname(resolve(id));

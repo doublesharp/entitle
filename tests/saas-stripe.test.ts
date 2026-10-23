@@ -24,6 +24,7 @@ const database = await isolatedDatabase(`sqlite:${directory}/db`);
 const db = database.db;
 const config = loadConfig({
   DEPLOYMENT_MODE: "hosted",
+    APP_BASE_PATH: "",
   APP_SECRET: "11".repeat(32),
   OPERATOR_TOKEN: "x".repeat(32),
 });

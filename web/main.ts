@@ -10,7 +10,13 @@ import {
 import { ApiClient, ApiError, errorMessage, watchLoginTokens } from "./api.ts";
 import type { Account, License, Product } from "./api.ts";
 import "./style.css";
-import { mountPublicSite, mountSellerApp } from "./site.ts";
+import { mountSellerApp } from "./site.ts";
+import { mountDocumentation } from "./documentation.ts";
+import {
+  applicationRoute,
+  applicationHref,
+  applicationAsset,
+} from "./navigation.ts";
 import {
   frameworkInfo,
   frameworkOf,
@@ -93,7 +99,7 @@ export function mountCustomerApp(
   checkoutLoader: CheckoutLoader = stripeLoader,
 ) {
   const tenant = /^\/t\/([a-z0-9][a-z0-9-]*)(?:\/)?$/.exec(
-    window.location.pathname,
+    applicationRoute(),
   )?.[1];
   if (!tenant)
     throw new Error("A tenant route is required to mount the buyer account.");
@@ -783,14 +789,14 @@ export function mountCustomerApp(
             h(
               "a",
               {
-                href: "/",
+                href: applicationHref("/"),
                 class: "brand",
                 "aria-label": `${site.name} home`,
               },
               [
                 h("img", {
                   class: "brand-mark",
-                  src: "/favicon.svg",
+                  src: applicationAsset("/favicon.svg"),
                   alt: "",
                   width: 36,
                   height: 36,
@@ -1232,7 +1238,11 @@ export function mountCustomerApp(
           h("footer", { class: "site-footer" }, [
             h("span", site.name),
             h("span", "Software licenses by doublesharp"),
-            h("a", { href: "/docs#licensing" }, "Source & licenses"),
+            h(
+              "a",
+              { href: applicationHref("/docs#licensing") },
+              "Source & licenses",
+            ),
           ]),
           confirmation.value &&
             h(Confirmation, {
@@ -1261,11 +1271,8 @@ export function mountSiteApp(
   target: string | Element = "#app",
   transport?: typeof fetch,
 ) {
-  if (/^\/seller\/?$/.test(window.location.pathname))
-    return mountSellerApp(target, transport);
-  if (window.location.pathname.startsWith("/t/"))
-    return mountCustomerApp(target, transport);
-  return mountPublicSite(target, transport);
+  const route = applicationRoute();
+  if (route.startsWith("/t/")) return mountCustomerApp(target, transport);
+  if (/^\/docs\/?$/.test(route)) return mountDocumentation(target, transport);
+  return mountSellerApp(target, transport);
 }
-
-mountSiteApp();

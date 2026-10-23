@@ -1,4 +1,5 @@
 import { site } from "../packages/shared/site.ts";
+import { normalizeAppBasePath } from "../packages/shared/app-path.ts";
 
 export const pageMetadata = {
   home: {
@@ -39,6 +40,7 @@ export type SitePage = keyof typeof pageMetadata;
 export function renderPageMetadata(
   page: SitePage,
   origin: string = site.hostedOrigin,
+  appBasePath = "",
 ) {
   const url = new URL(origin);
   if (
@@ -58,7 +60,8 @@ export function renderPageMetadata(
       .replaceAll("<", "&lt;")
       .replaceAll('"', "&quot;");
   const metadata = pageMetadata[page];
-  const image = `${url.origin}/social/${page}.png`;
+  const basePath = normalizeAppBasePath(appBasePath);
+  const image = `${url.origin}${basePath}/social/${page}.png`;
   const meta = (name: string, value: string, attribute = "property") =>
     `<meta ${attribute}="${name}" content="${escape(value)}" />`;
   return [
@@ -72,8 +75,8 @@ export function renderPageMetadata(
     ...(metadata.path === null
       ? [meta("robots", "noindex, nofollow", "name")]
       : [
-          `<link rel="canonical" href="${escape(url.origin + metadata.path)}" />`,
-          meta("og:url", url.origin + metadata.path),
+          `<link rel="canonical" href="${escape(url.origin + basePath + metadata.path)}" />`,
+          meta("og:url", url.origin + basePath + metadata.path),
         ]),
     meta("og:image", image),
     meta("og:image:type", "image/png"),

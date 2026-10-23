@@ -26,7 +26,7 @@ test("Elements sessions use canonical annual prices and the connected account wi
     source.stripe=new Stripe("sk_test_fixture",{host:"127.0.0.1",port:(server.address() as {port:number}).port,protocol:"http",maxNetworkRetries:0});
     const plan:Plan={tenant_id:tenant.id,id:"plan-elements",product_id:"product-elements",name:"Annual",site_allowance:5,stripe_price_id:"price_elements"};
     const result=await source.checkout(plan,"buyer@example.test",undefined,"elements");
-    assert.deepEqual(result,{uiMode:"elements",clientSecret:"cs_elements_secret_fixture",publishableKey:"pk_test_fixture",stripeAccount:"acct_elements",returnUrl:`${config.origin}/t/elements?checkout=return`});
+    assert.deepEqual(result,{uiMode:"elements",clientSecret:"cs_elements_secret_fixture",publishableKey:"pk_test_fixture",stripeAccount:"acct_elements",returnUrl:`${config.origin}/app/t/elements?checkout=return`});
     const session=requests.find(r=>r.path==="/v1/checkout/sessions")!;
     assert.equal(session.body.get("ui_mode"),"elements");
     assert.equal(session.body.get("mode"),"subscription");

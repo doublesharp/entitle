@@ -1,3 +1,4 @@
+import { appPath } from "../packages/shared/app-path.ts";
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -34,7 +35,10 @@ export async function sandboxRoutes(
     const created = await service.create(s.tenant, seller, mode);
     return {
       ...created,
-      customerUrl: `/t/${created.tenant.slug}`,
+      customerUrl: appPath(
+        `/t/${created.tenant.slug}`,
+        service.config.appBasePath,
+      ),
       apiBase: `/api/v1/tenants/${created.tenant.slug}`,
     };
   });

@@ -12,12 +12,12 @@ updates; installed software keeps working.
 
 ## Choose how to run it
 
-| | Hosted publisher | Self-hosted publisher |
-| --- | --- | --- |
-| Setup | Sign in at `/seller`, create a workspace and connect Stripe | Run the application with your database, private S3 storage, SMTP and Stripe account |
-| Operations | The service operator runs infrastructure and backups | You operate infrastructure, upgrades and backups |
-| Charges | Operator-configured subscription and application fee, plus Stripe fees | No Entitle platform subscription or application fee; provider costs apply |
-| Buyer payments | Your Stripe account | Your Stripe account |
+|                | Hosted publisher                                                       | Self-hosted publisher                                                               |
+| -------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Setup          | Sign in at `/app/seller`, create a workspace and connect Stripe        | Run the application with your database, private S3 storage, SMTP and Stripe account |
+| Operations     | The service operator runs infrastructure and backups                   | You operate infrastructure, upgrades and backups                                    |
+| Charges        | Operator-configured subscription and application fee, plus Stripe fees | No Entitle platform subscription or application fee; provider costs apply           |
+| Buyer payments | Your Stripe account                                                    | Your Stripe account                                                                 |
 
 The hosted origin is configured in [src/site.ts](src/site.ts). Use the address
 provided by your operator; the repository itself is not a service availability
@@ -57,18 +57,23 @@ Redis caching is optional. Production uses the [Dockerfile](Dockerfile) with
 
 The [documentation index](docs/README.md) provides guides by task.
 
-| Task | Guide |
-| --- | --- |
-| Manage products, customers and releases | [Seller guide](docs/seller-guide.md) |
-| Add licensing and updates to an application | [Client integration](docs/client-integration.md) and [framework support](docs/platform-support.md) |
-| Automate integrations | [API](docs/api.md), [CLI](docs/cli.md) and [webhooks](docs/webhooks.md) |
-| Operate a server | [Deployment](docs/deployment.md), [configuration](docs/configuration.md) and [backup](docs/backup.md) |
-| Move a publisher or handle privacy requests | [Portability](docs/portability.md) and [operator maintenance](docs/operator-maintenance.md) |
-| Develop or investigate a failure | [Architecture](docs/architecture.md), [testing](docs/testing.md) and [troubleshooting](docs/troubleshooting.md) |
+| Task                                        | Guide                                                                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Manage products, customers and releases     | [Seller guide](docs/seller-guide.md)                                                                            |
+| Add licensing and updates to an application | [Client integration](docs/client-integration.md) and [framework support](docs/platform-support.md)              |
+| Automate integrations                       | [API](docs/api.md), [CLI](docs/cli.md) and [webhooks](docs/webhooks.md)                                         |
+| Operate a server                            | [Deployment](docs/deployment.md), [configuration](docs/configuration.md) and [backup](docs/backup.md)           |
+| Move a publisher or handle privacy requests | [Portability](docs/portability.md) and [operator maintenance](docs/operator-maintenance.md)                     |
+| Develop or investigate a failure            | [Architecture](docs/architecture.md), [testing](docs/testing.md) and [troubleshooting](docs/troubleshooting.md) |
 
 The application also serves a public `/docs` guide. Credentials come from
 private environment configuration; never put seller API keys in distributed
 clients or browser checkout forms.
+
+The application and marketing site have independent frontend builds. Self-hosters
+use `pnpm build:server` and `pnpm build:web`; no marketing build is required. Hosted
+publication uses `pnpm build:hosted-web` and mounts the app at `/app/`. The app mount
+and marketing destination are configurable. See [deployment](docs/deployment.md#independent-marketing-and-application-sites).
 
 ## License
 

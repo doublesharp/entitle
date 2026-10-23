@@ -1,3 +1,4 @@
+import { appUrl } from "../packages/shared/app-path.ts";
 import { randomUUID } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { DB, Customer, TenantContext } from "./db.ts";
@@ -55,7 +56,7 @@ export class Auth {
         {
           to: c.email,
           subject: `Sign in to ${site.name}`,
-          text: `Open ${this.config.origin}/t/${this.tenant.slug}#login=${token}\n\nConfirm sign-in in your browser. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
+          text: `Open ${appUrl(this.config, `/t/${this.tenant.slug}#login=${token}`)}\n\nConfirm sign-in in your browser. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
         },
         this.tenant.id,
       );

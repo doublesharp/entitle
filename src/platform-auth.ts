@@ -1,3 +1,4 @@
+import { appUrl } from "../packages/shared/app-path.ts";
 import { randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Config } from "./config.ts";
@@ -113,7 +114,7 @@ export class PlatformAuth {
           {
             to: email,
             subject: `Sign in to ${site.name}`,
-            text: `Open ${this.config.origin}/seller#seller-login=${token}\n\nConfirm sign-in in the same browser that requested this email. Use your latest requested link. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
+            text: `Open ${appUrl(this.config, `/seller#seller-login=${token}`)}\n\nConfirm sign-in in the same browser that requested this email. Use your latest requested link. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
             messageId: `<${id}@entitle>`,
           },
           this.config.secret,

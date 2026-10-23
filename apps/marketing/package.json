@@ -1,0 +1,25 @@
+{
+  "name": "@entitle/marketing",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "cd ../.. && node scripts/build-marketing.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "cd ../.. && apps/marketing/node_modules/.bin/eslint --config apps/marketing/eslint.config.js web/marketing.ts web/marketing-entry.ts web/docs.ts web/navigation.ts web/metadata.ts packages/shared",
+    "test": "node --test --test-concurrency=1 ../../web/metadata.test.ts"
+  },
+  "dependencies": {
+    "vue": "3.5.44",
+    "@entitle/shared": "workspace:*",
+    "vite": "8.3.4",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "eslint": "10.13.0",
+    "@eslint/js": "10.0.1",
+    "@babel/core": "8.0.7",
+    "@babel/eslint-parser": "8.0.7",
+    "@babel/plugin-syntax-typescript": "8.0.3"
+  },
+  "devDependencies": {}
+}

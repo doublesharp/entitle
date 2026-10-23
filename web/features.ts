@@ -1,3 +1,4 @@
+import { applicationHref } from "./navigation.ts";
 import { defineComponent, h, nextTick, onMounted, onUnmounted, ref } from "vue";
 import type { PropType } from "vue";
 import { ApiClient, ApiError, errorMessage } from "./api.ts";
@@ -541,7 +542,11 @@ export const SellerFeaturePanel = defineComponent({
             ),
             h(
               "a",
-              { href: `/t/${encodeURIComponent(sandbox.value.sandboxSlug)}` },
+              {
+                href: applicationHref(
+                  `/t/${encodeURIComponent(sandbox.value.sandboxSlug)}`,
+                ),
+              },
               "Open test buyer page",
             ),
             sandbox.value.mode === "fixture" &&
@@ -568,7 +573,9 @@ export const SellerFeaturePanel = defineComponent({
               "a",
               {
                 "data-sandbox-open": "",
-                href: `/seller?tenant=${encodeURIComponent(sandbox.value.sandboxSlug)}`,
+                href: applicationHref(
+                  `/seller?tenant=${encodeURIComponent(sandbox.value.sandboxSlug)}`,
+                ),
               },
               "Open Sandbox",
             )
@@ -606,7 +613,9 @@ export const SellerFeaturePanel = defineComponent({
             "a",
             {
               "data-sandbox-open": "",
-              href: `/seller?tenant=${encodeURIComponent(child.value.slug)}`,
+              href: applicationHref(
+                `/seller?tenant=${encodeURIComponent(child.value.slug)}`,
+              ),
             },
             "Open Sandbox",
           ),
@@ -645,7 +654,11 @@ export const SellerFeaturePanel = defineComponent({
             )
           : h(
               "a",
-              { href: "/docs#hosted-tiers", target: "_blank", rel: "noopener" },
+              {
+                href: applicationHref("/docs#hosted-tiers"),
+                target: "_blank",
+                rel: "noopener",
+              },
               "Feature guide",
             ),
         !flags.value.hostedProConfigured &&

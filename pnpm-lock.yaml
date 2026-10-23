@@ -278,6 +278,39 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  apps/marketing:
+    dependencies:
+      '@babel/core':
+        specifier: 8.0.7
+        version: 8.0.7
+      '@babel/eslint-parser':
+        specifier: 8.0.7
+        version: 8.0.7(@babel/core@8.0.7)(eslint@10.13.0)
+      '@babel/plugin-syntax-typescript':
+        specifier: 8.0.3
+        version: 8.0.3(@babel/core@8.0.7)
+      '@entitle/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@eslint/js':
+        specifier: 10.0.1
+        version: 10.0.1(eslint@10.13.0)
+      '@types/node':
+        specifier: 26.6.5
+        version: 26.6.5
+      eslint:
+        specifier: 10.13.0
+        version: 10.13.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vite:
+        specifier: 8.3.4
+        version: 8.3.4(@types/node@26.6.5)
+      vue:
+        specifier: 3.5.44
+        version: 3.5.44(typescript@7.0.2)
+
   apps/server:
     dependencies:
       '@0xdoublesharp/adaptive-cache':

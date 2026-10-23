@@ -15,14 +15,13 @@ import { isolatedDatabase } from "./helpers/database.ts";
 
 process.env.NODE_ENV = "test";
 async function fixture(t: TestContext, override: Partial<Config> = {}) {
-  const root = await mkdtemp(
-    "/Volumes/Scratch/entitle/tmp/features-api-",
-  );
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/features-api-");
   const config = {
     ...loadConfig({
       APP_SECRET: "12".repeat(32),
       OPERATOR_TOKEN: "x".repeat(32),
       DEPLOYMENT_MODE: "hosted",
+    APP_BASE_PATH: "",
       DATA_DIR: root,
       LOCAL_BILLING: "true",
     }),
@@ -369,6 +368,11 @@ test("sandbox HTTP routes reject live fake purchases and isolate paid test recor
   assert.equal(created.statusCode, 200, created.body);
   const child = created.json().tenant;
   assert.equal(created.json().customerUrl, `/t/${child.slug}`);
+  f.config.appBasePath = "/app";
+  const hosted = await f.request("POST", "/sandbox", {});
+  assert.equal(hosted.json().customerUrl, `/app/t/${child.slug}`);
+  assert.equal(hosted.json().apiBase, `/api/v1/tenants/${child.slug}`);
+  f.config.appBasePath = "";
   assert.equal((await f.request("POST", "/sandbox", {})).json().created, false);
   const url = `/api/v1/tenants/${child.slug}/seller`;
   const productId = randomUUID(),
@@ -1152,13 +1156,10 @@ test("signed connected webhooks supply tenant mode and canonical customer attrib
   );
   for (const live of [false, true]) {
     const f = await fixture(t, { stripeLiveMode: live });
-    await f
-      .db("tenants")
-      .where({ id: "primary" })
-      .update({
-        stripe_account_id: "acct_privacyContext",
-        stripe_status: "connected",
-      });
+    await f.db("tenants").where({ id: "primary" }).update({
+      stripe_account_id: "acct_privacyContext",
+      stripe_status: "connected",
+    });
     const body = JSON.stringify({
       id: `evt_privacy_${live}`,
       type: "charge.dispute.created",
@@ -1187,33 +1188,126 @@ test("signed connected webhooks supply tenant mode and canonical customer attrib
   ]);
 });
 
-test("failed export housekeeping cannot stop another publisher's queued login email",async t=>{
- const f=await fixture(t);const {Portability}=await import('../src/portability.ts');const {Auth}=await import('../src/auth.ts');
- const other=await new Tenants(f.db,f.config).create(f.seller,{slug:'unrelated-publisher',name:'Other publisher'}),customer=randomUUID();
- await f.db('customers').insert({tenant_id:other.id,id:customer,email:'other-buyer@example.test'});
- await new Auth(f.db,f.config,other).request('other-buyer@example.test');
- assert.equal((await f.db('emails').where({tenant_id:other.id})).length,1);
- let attempted=0;t.mock.method(Portability.prototype,'cleanupExpired',async()=>{attempted++;throw Error('private export path cannot be unlinked');});
- await (f.app as typeof f.app & {tick:()=>Promise<void>}).tick();
- assert.equal(attempted,1);assert.equal((await f.db('emails').where({tenant_id:other.id}).first()).state,'sent');
+test("failed export housekeeping cannot stop another publisher's queued login email", async (t) => {
+  const f = await fixture(t);
+  const { Portability } = await import("../src/portability.ts");
+  const { Auth } = await import("../src/auth.ts");
+  const other = await new Tenants(f.db, f.config).create(f.seller, {
+      slug: "unrelated-publisher",
+      name: "Other publisher",
+    }),
+    customer = randomUUID();
+  await f
+    .db("customers")
+    .insert({
+      tenant_id: other.id,
+      id: customer,
+      email: "other-buyer@example.test",
+    });
+  await new Auth(f.db, f.config, other).request("other-buyer@example.test");
+  assert.equal((await f.db("emails").where({ tenant_id: other.id })).length, 1);
+  let attempted = 0;
+  t.mock.method(Portability.prototype, "cleanupExpired", async () => {
+    attempted++;
+    throw Error("private export path cannot be unlinked");
+  });
+  await (f.app as typeof f.app & { tick: () => Promise<void> }).tick();
+  assert.equal(attempted, 1);
+  assert.equal(
+    (await f.db("emails").where({ tenant_id: other.id }).first()).state,
+    "sent",
+  );
 });
 
-test('an actually unreadable export directory preserves quota without blocking another tenant mail or export',async t=>{
- const f=await fixture(t),{chmod}=await import('node:fs/promises'),{join}=await import('node:path'),{Auth}=await import('../src/auth.ts');
- const other=await new Tenants(f.db,f.config).create(f.seller,{slug:'healthy-export',name:'Healthy export'});
- for(const [tenantId,account] of [['primary','acct_blockedExport'],[other.id,'acct_healthyExport']])await f.db('tenants').where({id:tenantId}).update({stripe_account_id:account,stripe_status:'connected'});
- const headersFor=async(tenantId:string,letter:string)=>{const key=`DE-TK-${letter.repeat(43)}`;await f.db('tenant_api_keys').insert({id:randomUUID(),tenant_id:tenantId,name:'Export fixture',key_hash:hash(key),display_prefix:key.slice(0,14),scopes:JSON.stringify(['data:export']),created_at:Date.now(),expires_at:Date.now()+86400000,revoked_at:null,last_used_at:null});return {authorization:`Bearer ${key}`};};
- const primaryHeaders=await headersFor('primary','A'),otherHeaders=await headersFor(other.id,'B');
- const created=await f.request('POST','/exports',{passphrase:'private cleanup fixture passphrase'},primaryHeaders);assert.equal(created.statusCode,200,created.body);
- const directory=join(f.config.storage,'tenant-exports',created.json().id);await chmod(directory,0);
- const log=t.mock.method(f.app.log,'error');
- try {
- const deleted=await f.request('DELETE',`/exports/${created.json().id}`,{},primaryHeaders);assert.equal(deleted.statusCode,503,deleted.body);
- const customer=randomUUID();await f.db('customers').insert({tenant_id:other.id,id:customer,email:'healthy-buyer@example.test'});await new Auth(f.db,f.config,other).request('healthy-buyer@example.test');
- await (f.app as typeof f.app & {tick:()=>Promise<void>}).tick();assert.equal((await f.db('emails').where({tenant_id:other.id}).first()).state,'sent');
- const unrelated=await f.app.inject({method:'POST',url:`/api/v1/tenants/${other.slug}/seller/exports`,headers:otherHeaders,payload:{passphrase:'other private cleanup passphrase'}});assert.equal(unrelated.statusCode,200,unrelated.body);
- assert.ok(log.mock.calls.some(c=>JSON.stringify(c.arguments).includes('export_cleanup_failed')));assert.ok(log.mock.calls.every(c=>!JSON.stringify(c.arguments).includes(directory)));
- } finally {await chmod(directory,0o700);}
+test("an actually unreadable export directory preserves quota without blocking another tenant mail or export", async (t) => {
+  const f = await fixture(t),
+    { chmod } = await import("node:fs/promises"),
+    { join } = await import("node:path"),
+    { Auth } = await import("../src/auth.ts");
+  const other = await new Tenants(f.db, f.config).create(f.seller, {
+    slug: "healthy-export",
+    name: "Healthy export",
+  });
+  for (const [tenantId, account] of [
+    ["primary", "acct_blockedExport"],
+    [other.id, "acct_healthyExport"],
+  ])
+    await f
+      .db("tenants")
+      .where({ id: tenantId })
+      .update({ stripe_account_id: account, stripe_status: "connected" });
+  const headersFor = async (tenantId: string, letter: string) => {
+    const key = `DE-TK-${letter.repeat(43)}`;
+    await f
+      .db("tenant_api_keys")
+      .insert({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        name: "Export fixture",
+        key_hash: hash(key),
+        display_prefix: key.slice(0, 14),
+        scopes: JSON.stringify(["data:export"]),
+        created_at: Date.now(),
+        expires_at: Date.now() + 86400000,
+        revoked_at: null,
+        last_used_at: null,
+      });
+    return { authorization: `Bearer ${key}` };
+  };
+  const primaryHeaders = await headersFor("primary", "A"),
+    otherHeaders = await headersFor(other.id, "B");
+  const created = await f.request(
+    "POST",
+    "/exports",
+    { passphrase: "private cleanup fixture passphrase" },
+    primaryHeaders,
+  );
+  assert.equal(created.statusCode, 200, created.body);
+  const directory = join(f.config.storage, "tenant-exports", created.json().id);
+  await chmod(directory, 0);
+  const log = t.mock.method(f.app.log, "error");
+  try {
+    const deleted = await f.request(
+      "DELETE",
+      `/exports/${created.json().id}`,
+      {},
+      primaryHeaders,
+    );
+    assert.equal(deleted.statusCode, 503, deleted.body);
+    const customer = randomUUID();
+    await f
+      .db("customers")
+      .insert({
+        tenant_id: other.id,
+        id: customer,
+        email: "healthy-buyer@example.test",
+      });
+    await new Auth(f.db, f.config, other).request("healthy-buyer@example.test");
+    await (f.app as typeof f.app & { tick: () => Promise<void> }).tick();
+    assert.equal(
+      (await f.db("emails").where({ tenant_id: other.id }).first()).state,
+      "sent",
+    );
+    const unrelated = await f.app.inject({
+      method: "POST",
+      url: `/api/v1/tenants/${other.slug}/seller/exports`,
+      headers: otherHeaders,
+      payload: { passphrase: "other private cleanup passphrase" },
+    });
+    assert.equal(unrelated.statusCode, 200, unrelated.body);
+    assert.ok(
+      log.mock.calls.some((c) =>
+        JSON.stringify(c.arguments).includes("export_cleanup_failed"),
+      ),
+    );
+    assert.ok(
+      log.mock.calls.every(
+        (c) => !JSON.stringify(c.arguments).includes(directory),
+      ),
+    );
+  } finally {
+    await chmod(directory, 0o700);
+  }
 });
 
 test("local paid purchases retain portable customer identifiers and export successfully", async (t) => {

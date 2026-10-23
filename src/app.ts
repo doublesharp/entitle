@@ -1,3 +1,4 @@
+import { appPath } from "../packages/shared/app-path.ts";
 import { handlerOwnsSocketTimeout } from "./http-timeout.ts";
 import { ReadCache } from "./read-cache.ts";
 import Fastify, { LogController, type FastifyRequest } from "fastify";
@@ -337,7 +338,8 @@ export async function buildApp(
     directory: join(config.storage, "tenant-exports"),
     maxExports: config.exportMaxExports ?? 4,
     maxBytes: config.exportMaxBytes ?? 10 * 1024 ** 3,
-    onFailure: ({operation,code}) => app.log.error({operation,code}, "Export cleanup will retry."),
+    onFailure: ({ operation, code }) =>
+      app.log.error({ operation, code }, "Export cleanup will retry."),
     ...(!hosted && config.standaloneStripeAccountId
       ? { sourceStripeAccountId: config.standaloneStripeAccountId }
       : {}),
@@ -777,6 +779,7 @@ export async function buildApp(
   await app.register(
     async (api) => {
       api.get("/info", async () => ({
+        appBasePath: config.appBasePath ?? "",
         deploymentMode: config.deploymentMode,
         applicationFeePercent: config.hostedApplicationFeePercent,
         name: site.name,
@@ -869,7 +872,10 @@ export async function buildApp(
           await platformAuth.seller(req, false),
         );
         return reply.redirect(
-          `/seller?tenant=${encodeURIComponent(result.tenant.slug)}&connect=success`,
+          appPath(
+            `/seller?tenant=${encodeURIComponent(result.tenant.slug)}&connect=success`,
+            config.appBasePath,
+          ),
         );
       });
     },

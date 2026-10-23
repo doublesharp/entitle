@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "../..",
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "paths": {
+      "vue": [
+        "./node_modules/vue"
+      ]
+    }
+  },
+  "include": [
+    "../../web/marketing*.ts",
+    "../../web/docs.ts",
+    "../../web/navigation.ts",
+    "../../web/metadata*.ts",
+    "../../web/assets.d.ts",
+    "../../packages/shared/**/*.ts"
+  ],
+  "exclude": [
+    "../../node_modules"
+  ]
+}

@@ -1,11 +1,13 @@
 import { resolve } from "node:path";
 import { z } from "zod";
+import { normalizeAppBasePath } from "../packages/shared/app-path.ts";
 export interface Config {
   deploymentMode: "standalone" | "hosted";
   standaloneOwnerEmail: string;
   standaloneStripeAccountId?: string;
   hostedApplicationFeePercent: number;
   origin: string;
+  appBasePath?: string;
   cacheRedisUrl?: string;
   cacheMemoryBytes?: number;
   cacheNamespace?: string;
@@ -152,6 +154,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       );
   }
   const origin = publicUrl.origin;
+  const appBasePath = normalizeAppBasePath(
+    env.APP_BASE_PATH ?? (deploymentMode === "hosted" ? "/app" : ""),
+  );
   const ports = z
     .object({
       PORT: z.coerce.number().int().min(0).max(65535).default(3211),
@@ -378,6 +383,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     standaloneOwnerEmail,
     hostedApplicationFeePercent: Number(fee),
     origin,
+    appBasePath,
     ...(env.CACHE_REDIS_URL
       ? {
           cacheRedisUrl: env.CACHE_REDIS_URL.replace(/^[^:]+/, (scheme) =>

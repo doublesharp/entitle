@@ -24,10 +24,13 @@ http {
     map "$uri:$status" $entitle_cache_control {
         default "no-cache";
         ~^/assets/.*:(200|206|304)$ "public, max-age=31536000, immutable";
+        ~^${ENTITLE_APP_BASE_PATH}/assets/.*:(200|206|304)$ "public, max-age=31536000, immutable";
     }
     server {
         listen 8080;
         server_name _;
+        # Preserve the public origin through reverse proxies and email redirects.
+        absolute_redirect off;
         root /releases/current;
         index index.html;
         # The API enforces its configured upload limits while streaming requests.
@@ -67,17 +70,49 @@ http {
             # Avoid inheriting/duplicating static headers. API owns its headers.
             add_header X-Content-Type-Options nosniff always;
         }
-        location ^~ /assets/ {
+        location /assets/ {
             alias /releases/shared/assets/;
         }
-        location = /release-manifest.json { return 404; }
+        location ~ (^|/)release-manifest\.json$ { return 404; }
         location ~ (^|/)\. { return 404; }
         location = /healthz { try_files /index.html =503; }
         location = / { try_files /index.html =404; }
-        # Older releases have one shell. Keep them usable during rollout/rollback.
-        location ~ ^/seller/?$ { try_files /seller.html /index.html =404; }
+        # Hosted publication contains an independent app under app/. Standalone
+        # publication has no marketing files and opens its app at the root.
+        location = ${ENTITLE_APP_BASE_PATH} { return 308 ${ENTITLE_APP_BASE_PATH}/$is_args$args; }
+        # Preserve new API-generated account links while an older frontend is
+        # active, including the first rollout and a retained frontend rollback.
+        location = ${ENTITLE_APP_BASE_PATH}/ {
+            if (!-f /releases/current/app/index.html) { return 308 /seller$is_args$args; }
+            try_files /app/index.html =404;
+        }
+        location ~ ^${ENTITLE_APP_BASE_PATH}/seller/?$ {
+            if (!-f /releases/current/app/index.html) { return 308 /seller$is_args$args; }
+            try_files /app/seller.html /app/index.html =404;
+        }
+        location ~ ^${ENTITLE_APP_BASE_PATH}/docs/?$ {
+            if (!-f /releases/current/app/index.html) { return 308 /docs$is_args$args; }
+            try_files /app/docs.html /app/index.html =404;
+        }
+        location ~ ^${ENTITLE_APP_BASE_PATH}(?<entitle_account_path>/t/[^/]+/?)$ {
+            if (!-f /releases/current/app/index.html) { return 308 $entitle_account_path$is_args$args; }
+            try_files /app/customer.html /app/index.html =404;
+        }
+        location ${ENTITLE_APP_BASE_PATH}/assets/ { alias /releases/shared/assets/; }
+        location ${ENTITLE_APP_BASE_PATH}/social/ { alias /releases/current/app/social/; }
+        location ${ENTITLE_APP_BASE_PATH}/legal/ { alias /releases/current/app/legal/; }
+        location = ${ENTITLE_APP_BASE_PATH}/favicon.svg { alias /releases/current/app/favicon.svg; }
+        # Existing email, checkout and updater links keep their API or account
+        # destinations. Browsers retain fragments through these same-origin redirects.
+        location ~ ^/seller/?$ {
+            if (-f /releases/current/app/index.html) { return 308 ${ENTITLE_APP_BASE_PATH}$request_uri; }
+            try_files /seller.html /index.html =404;
+        }
         location ~ ^/docs/?$ { try_files /docs.html /index.html =404; }
-        location ~ ^/t/[^/]+/?$ { try_files /customer.html /index.html =404; }
+        location ~ ^/t/[^/]+/?$ {
+            if (-f /releases/current/app/index.html) { return 308 ${ENTITLE_APP_BASE_PATH}$request_uri; }
+            try_files /customer.html /index.html =404;
+        }
         # Only the application's known client routes get index.html.
         location / { try_files $uri =404; }
     }
