@@ -33,7 +33,16 @@ case "$ENTITLE_PUBLIC_SCHEME" in
     https|http) ;;
     *) echo 'Invalid ENTITLE_PUBLIC_SCHEME: expected https or http' >&2; exit 1 ;;
 esac
-export ENTITLE_API_UPSTREAM ENTITLE_PUBLIC_HOST ENTITLE_PUBLIC_SCHEME
+# Only a validated local mount may enter Nginx location expressions.
+ENTITLE_APP_BASE_PATH=${ENTITLE_APP_BASE_PATH:-/app}
+case "$ENTITLE_APP_BASE_PATH" in
+    *[!A-Za-z0-9_/-]*) echo 'Invalid ENTITLE_APP_BASE_PATH characters' >&2; exit 1 ;;
+esac
+if ! printf '%s\n' "$ENTITLE_APP_BASE_PATH" | grep -Eq '^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$' || [ "${#ENTITLE_APP_BASE_PATH}" -gt 128 ]; then
+    echo 'Invalid ENTITLE_APP_BASE_PATH: expected an absolute app path' >&2
+    exit 1
+fi
+export ENTITLE_API_UPSTREAM ENTITLE_PUBLIC_HOST ENTITLE_PUBLIC_SCHEME ENTITLE_APP_BASE_PATH
 # Comma-separated IPv4/IPv6 CIDRs. Never accept hostnames, bare addresses,
 # whitespace or Nginx syntax. Configure the exact ingress /32 or /128 where
 # possible. Empty means no trusted proxies, including private network peers.
@@ -85,7 +94,7 @@ if [ -n "${ENTITLE_TRUSTED_PROXY_CIDRS:-}" ]; then
 fi
 export ENTITLE_REAL_IP_CONFIG
 umask 077
-envsubst '${ENTITLE_API_UPSTREAM} ${ENTITLE_PUBLIC_HOST} ${ENTITLE_PUBLIC_SCHEME} ${ENTITLE_REAL_IP_CONFIG}' \
+envsubst '${ENTITLE_API_UPSTREAM} ${ENTITLE_PUBLIC_HOST} ${ENTITLE_PUBLIC_SCHEME} ${ENTITLE_REAL_IP_CONFIG} ${ENTITLE_APP_BASE_PATH}' \
     < /etc/entitle/nginx.conf.template > /runtime/nginx.conf
 nginx -t -c /runtime/nginx.conf
 exec nginx -c /runtime/nginx.conf -g 'daemon off;'

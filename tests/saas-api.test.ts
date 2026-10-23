@@ -32,6 +32,7 @@ async function fixture(
   const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/saas-api-");
   const config = loadConfig({
     DEPLOYMENT_MODE: "hosted",
+    APP_BASE_PATH: "",
     APP_SECRET: "12".repeat(32),
     OPERATOR_TOKEN: "root-operator-secret-for-tests-123456",
     DATA_DIR: root,
@@ -1481,6 +1482,18 @@ test("seller OAuth callback binds the browser session and redirects only after c
   const portal = await f.post(`${route}/platform/portal`, {}, browser);
   assert.equal(portal.statusCode, 200, portal.body);
   assert.equal(portal.json().url, "https://billing.stripe.test/platform");
+  f.config.appBasePath = "/app";
+  const reconnect = await f.post(`${route}/stripe/connect`, {}, browser);
+  const nextState = new URL(reconnect.json().url).searchParams.get("state")!;
+  const mountedCallback = await f.app.inject({
+    url: `/api/v1/platform/stripe/callback?code=fixture&state=${nextState}`,
+    headers: browser,
+  });
+  assert.equal(mountedCallback.statusCode, 302, mountedCallback.body);
+  assert.equal(
+    mountedCallback.headers.location,
+    "/app/seller?tenant=oauth-merchant&connect=success",
+  );
 });
 
 test("platform operator administration validates targets and audits status, owner, job recovery and local fixtures", async (t) => {

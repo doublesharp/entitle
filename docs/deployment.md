@@ -1,7 +1,8 @@
 # Deployment
 
-The frontend build embeds Open Graph and Twitter preview metadata for the home,
-documentation, seller and customer pages. Preview images are public PNG assets.
+The independent frontend builds embed Open Graph and Twitter preview metadata.
+Marketing includes home and documentation pages; the application includes
+seller, customer and local documentation pages. Preview images are public PNG assets.
 For a self-hosted domain, set `WEB_PUBLIC_ORIGIN=https://licenses.example.com`
 when running `pnpm build:web`; it defaults to `https://entitle.doublesharp.com`.
 This build setting controls metadata URLs only. Keep `PUBLIC_ORIGIN` configured
@@ -13,11 +14,11 @@ Run the server and a static web runtime behind HTTPS. The server runs the API an
 ## Using the hosted service
 
 As a hosted seller, you do not deploy this application or provide database,
-storage, SMTP or server credentials. Sign in at `/seller`, open the emailed
+storage, SMTP or server credentials. Sign in at `/app/seller`, open the emailed
 link in the same browser, create a workspace, and connect your Stripe account
 from Billing. Create annual recurring Stripe prices and configure its Customer
 Portal, then add products, publish releases and copy the generated client setup.
-Buyers use `/t/YOUR_SLUG`; integrations use `/api/v1/tenants/YOUR_SLUG`.
+Buyers use `/app/t/YOUR_SLUG`; integrations use `/api/v1/tenants/YOUR_SLUG`.
 Create scoped API keys for your own automation, never for distributed clients.
 
 Review the platform subscription amount, application fee and workspace limits
@@ -103,6 +104,42 @@ source available under [Elastic License 2.0](../LICENSE) plus the
 products is covered by that permission. Providing a licensing/distribution
 platform to independent publishers requires separate permission where restricted
 by those terms. Enabling hosted mode does not grant additional license rights.
+
+## Independent marketing and application sites
+
+Self-hosting needs only `pnpm build:server` and `pnpm build:web`. The app-only web
+artifact opens the seller dashboard at `/`, provides customer routes under `/t/`,
+and includes local documentation. It contains no marketing entry point. The
+marketing site is optional and has its own `pnpm build:marketing` target and
+`@entitle/marketing` dependency closure.
+
+Hosted publication uses `pnpm build:hosted-web`. Marketing and public documentation
+occupy `/` and `/docs`; the app occupies `/app/`. It independently builds the app
+and marketing bundles, then assembles an atomic hosted archive. Existing `/seller`
+and `/t/...` links redirect to the app while preserving query and browser fragment
+context. API, update-feed, webhook and package endpoints remain under `/api/`.
+Marketing documentation is static; deployment-specific limits are in app docs.
+The API defaults to `/app` in hosted mode and `/` in standalone mode. An explicit
+empty `APP_BASE_PATH` keeps hosted installations at the root.
+
+| Setting                 | Standalone default              | Hosted value                      | Purpose                                                |
+| ----------------------- | ------------------------------- | --------------------------------- | ------------------------------------------------------ |
+| `PUBLIC_ORIGIN`         | Your origin                     | `https://entitle.doublesharp.com` | API origin and authentication checks                   |
+| `APP_BASE_PATH`         | empty                           | `/app` (mode default)             | Server-generated account, login and Stripe return URLs |
+| `WEB_APP_BASE_PATH`     | empty for `build:web`           | `/app` for `build:hosted-web`     | App bundle assets, metadata and navigation             |
+| `WEB_APP_URL`           | `/app/` for marketing           | `/app/`                           | Marketing links to the application                     |
+| `ENTITLE_APP_BASE_PATH` | `/app`, unused by root-only app | `/app`                            | Optional hosted mount in the web runtime               |
+
+For a later subdomain move, publish the app-only artifact at the new origin,
+leave `APP_BASE_PATH` and `WEB_APP_BASE_PATH` empty, set `PUBLIC_ORIGIN` to that
+origin, and build marketing with `WEB_APP_URL=https://your-app-host/`. Serve app
+and API on the same origin. No CORS or cookie-domain changes are required. Review
+Stripe allowed return/callback URLs and email links when changing the public origin.
+
+CI publishes `frontend-SHA` for the standalone app, `marketing-SHA` for marketing,
+and `hosted-frontend-SHA` for the combined hosted layout. All use the same verified
+manifest/immutable asset publication format. The private promotion workflow chooses
+the hosted artifact and retains explicit compatibility with older single-site releases.
 
 ## Shared production infrastructure
 

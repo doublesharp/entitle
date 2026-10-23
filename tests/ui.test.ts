@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { after, afterEach, test } from "node:test";
 import { Window } from "happy-dom";
-import type { App as VueApp } from "vue";
 import { ApiClient } from "../web/api.ts";
 import type { Account, License, Product } from "../web/api.ts";
 import type {
@@ -133,9 +132,7 @@ Object.defineProperty(dom.location, "assign", {
 });
 dom.document.body.innerHTML = '<div id="app"></div>';
 const ui = await import("../web/main.ts");
-let mounted = (
-  dom.document.querySelector("#app") as unknown as { __vue_app__: VueApp }
-).__vue_app__;
+let mounted = ui.mountCustomerApp("#app");
 const { nextTick } = await import("vue");
 
 async function flush() {
@@ -1676,4 +1673,26 @@ test("privacy session expiry clears buyer identity and closing privacy resets it
   await flush();
   assert.match(text(), /Sign in to your account/);
   assert.doesNotMatch(text(), /customer@example.test/);
+});
+
+test("hosted buyer routing uses app-local navigation and unprefixed tenant APIs", async () => {
+  await mount();
+  mounted.unmount();
+  dom.history.replaceState(null, "", "/app/t/primary");
+  const meta = dom.document.createElement("meta");
+  meta.name = "entitle-app-base";
+  meta.content = "/app";
+  dom.document.head.append(meta);
+  try {
+    mounted = ui.mountSiteApp("#app");
+    await flush();
+    assert.ok(dom.document.querySelector('header a[href="/app/"]'));
+    assert.ok(dom.document.querySelector('a[href="/app/docs#licensing"]'));
+    assert.ok(server.requests.some((request) => request.path === "/me"));
+    assert.ok(
+      server.requests.every((request) => !request.path.includes("/app/api/")),
+    );
+  } finally {
+    meta.remove();
+  }
 });

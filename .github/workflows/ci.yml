@@ -104,9 +104,10 @@ jobs:
       # pnpm also installs root deps when filtered; --prod excludes root devDeps.
       - run: |
           npm install --global pnpm@12.14.0
-          pnpm --filter @entitle/web... install --prod --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
+          pnpm --filter @entitle/web... --filter @entitle/marketing... install --prod --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
       - run: pnpm typecheck:web && pnpm lint:web && pnpm test:web
-      - run: pnpm build:web
+      - run: pnpm --filter @entitle/marketing typecheck && pnpm --filter @entitle/marketing lint && pnpm --filter @entitle/marketing test
+      - run: pnpm build:hosted-web
       - run: node --test tests/frontend-release.test.mjs
         env:
           FRONTEND_BUILD_CHECK: '1'
@@ -114,13 +115,35 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
+          mkdir -p "$BUILD_DIR/marketing-package" "$BUILD_DIR/hosted-package"
           node scripts/deployment/frontend-release.mjs pack --input "$BUILD_DIR/web" --output "$BUILD_DIR/frontend.tar" --source-sha "$SOURCE_SHA" > "$BUILD_DIR/frontend.json"
+          node scripts/deployment/frontend-release.mjs pack --input "$BUILD_DIR/marketing" --output "$BUILD_DIR/marketing-package/frontend.tar" --source-sha "$SOURCE_SHA" > "$BUILD_DIR/marketing-package/frontend.json"
+          node scripts/deployment/frontend-release.mjs pack --input "$BUILD_DIR/hosted-web" --output "$BUILD_DIR/hosted-package/frontend.tar" --source-sha "$SOURCE_SHA" > "$BUILD_DIR/hosted-package/frontend.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: frontend-${{ github.sha }}
           path: |
             /Volumes/Scratch/entitle/build/ci/frontend.tar
             /Volumes/Scratch/entitle/build/ci/frontend.json
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: marketing-${{ github.sha }}
+          path: |
+            /Volumes/Scratch/entitle/build/ci/marketing-package/frontend.tar
+            /Volumes/Scratch/entitle/build/ci/marketing-package/frontend.json
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hosted-frontend-${{ github.sha }}
+          path: |
+            /Volumes/Scratch/entitle/build/ci/hosted-package/frontend.tar
+            /Volumes/Scratch/entitle/build/ci/hosted-package/frontend.json
           retention-days: 7
           compression-level: 0
           if-no-files-found: error

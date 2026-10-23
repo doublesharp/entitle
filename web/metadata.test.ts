@@ -64,3 +64,23 @@ test("all preview images are actual 1200 by 630 PNGs", async () => {
     assert.equal(png.readUInt32BE(20), 630);
   }
 });
+
+test("application metadata follows a configurable app mount", () => {
+  const html = renderPageMetadata(
+    "seller",
+    "https://licenses.example.com",
+    "/app/",
+  );
+  assert.match(html, /href="https:\/\/licenses.example.com\/app\/seller"/);
+  assert.match(
+    html,
+    /content="https:\/\/licenses.example.com\/app\/social\/seller.png"/,
+  );
+  assert.throws(() =>
+    renderPageMetadata(
+      "seller",
+      "https://licenses.example.com",
+      "/app/../other",
+    ),
+  );
+});

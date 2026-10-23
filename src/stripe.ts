@@ -1,3 +1,4 @@
+import { appUrl } from "../packages/shared/app-path.ts";
 import Stripe from "stripe";
 import { randomUUID } from "node:crypto";
 import type {
@@ -419,11 +420,20 @@ export class StripeBilling implements BillingSource {
         ...(uiMode === "elements"
           ? {
               ui_mode: "elements",
-              return_url: `${this.config.origin}/t/${this.tenant.slug}?checkout=return`,
+              return_url: appUrl(
+                this.config,
+                `/t/${this.tenant.slug}?checkout=return`,
+              ),
             }
           : {
-              success_url: `${this.config.origin}/t/${this.tenant.slug}?checkout=success`,
-              cancel_url: `${this.config.origin}/t/${this.tenant.slug}?checkout=canceled`,
+              success_url: appUrl(
+                this.config,
+                `/t/${this.tenant.slug}?checkout=success`,
+              ),
+              cancel_url: appUrl(
+                this.config,
+                `/t/${this.tenant.slug}?checkout=canceled`,
+              ),
             }),
         subscription_data: {
           ...(this.config.deploymentMode === "hosted" &&
@@ -453,7 +463,7 @@ export class StripeBilling implements BillingSource {
         ...(this.config.deploymentMode === "hosted"
           ? { stripeAccount: this.tenant.stripe_account_id! }
           : {}),
-        returnUrl: `${this.config.origin}/t/${this.tenant.slug}?checkout=return`,
+        returnUrl: appUrl(this.config, `/t/${this.tenant.slug}?checkout=return`),
       };
     }
     check(
@@ -475,7 +485,7 @@ export class StripeBilling implements BillingSource {
     const session = await this.stripe.billingPortal.sessions.create(
       {
         customer: customerId,
-        return_url: `${this.config.origin}/t/${this.tenant.slug}`,
+        return_url: appUrl(this.config, `/t/${this.tenant.slug}`),
       },
       this.options(),
     );

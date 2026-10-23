@@ -1,4 +1,5 @@
 import { h } from "vue";
+import { applicationHref, applicationAsset } from "./navigation.ts";
 import type { VNodeChild } from "vue";
 import { site } from "../packages/shared/site.ts";
 
@@ -135,16 +136,18 @@ const code = (label: string, source: string) =>
 export function publicDocs(
   info: ServerInfo | null,
   error: string,
-  reload: () => void,
+  reload: (() => void) | undefined,
+  staticSite = false,
 ) {
-  const base = `${window.location.origin}/api/v1/tenants/your-workspace`;
+  const origin = new URL(applicationHref("/"), window.location.origin).origin;
+  const base = `${origin}/api/v1/tenants/your-workspace`;
   return h("div", { class: "docs-layout" }, [
     h("nav", { class: "docs-nav", "aria-label": "Documentation sections" }, [
       h("p", { class: "docs-nav-title" }, "On this page"),
       ...navigationGroups(),
       h(
         "a",
-        { href: "/seller", class: "docs-dashboard-link" },
+        { href: applicationHref("/seller"), class: "docs-dashboard-link" },
         "Open seller dashboard ↗",
       ),
     ]),
@@ -640,7 +643,7 @@ export function publicDocs(
         code(
           "Shell / WordPress publication",
           "export PUBLIC_ORIGIN=" +
-            window.location.origin +
+            origin +
             "\nexport TENANT_SLUG=your-workspace\n# The secret store supplies TENANT_API_KEY.\npnpm cli product examples/product.json\npnpm cli publish validated-field-pro 1.0.0 /private/build/pro.zip examples/release.json",
         ),
         code(
@@ -1067,7 +1070,7 @@ export function publicDocs(
         h("h3", "Check health and durable work"),
         code(
           "Shell / public health probes",
-          `curl --fail ${window.location.origin}/api/v1/health\ncurl --fail ${window.location.origin}/api/v1/ready`,
+          `curl --fail ${origin}/api/v1/health\ncurl --fail ${origin}/api/v1/ready`,
         ),
         paragraph(
           "Liveness checks that the process responds. Readiness checks a database query, S3 bucket access and private work-directory access. Neither qualifies email delivery, live Stripe, all storage permissions or backup recovery. Monitor queue failures/age, disk, storage reservations, served bytes and provider errors separately.",
@@ -1138,7 +1141,13 @@ export function publicDocs(
                   h("dd", info.databaseEngines.join(", ")),
                 ]),
               ])
-            : !error && h("p", { role: "status" }, "Loading server limits…"),
+            : staticSite
+              ? h(
+                  "a",
+                  { href: applicationHref("/docs#server-limits") },
+                  "View live server limits in the app",
+                )
+              : !error && h("p", { role: "status" }, "Loading server limits…"),
           error &&
             h("div", { class: "docs-load-error" }, [
               h("p", { role: "alert" }, error),
@@ -1417,15 +1426,19 @@ export function publicDocs(
         h(
           "ul",
           { class: "docs-source-links" },
-          [
-            ["/legal/source.tar.gz", "Download this build’s source"],
-            ["/legal/Elastic-2.0.txt", "Elastic License 2.0"],
-            ["/legal/ADDITIONAL-PERMISSION.txt", "Publisher use permission"],
-            ["/legal/MIT.txt", "MIT client license"],
-            ["/legal/0BSD.txt", "Generated client code license"],
-            ["/legal/NOTICE.txt", "Project notices"],
-            ["/legal/THIRD-PARTY.txt", "Browser dependency notices"],
-          ].map(([href, label]) => h("li", h("a", { href }, label))),
+          (
+            [
+              ["/legal/source.tar.gz", "Download this build’s source"],
+              ["/legal/Elastic-2.0.txt", "Elastic License 2.0"],
+              ["/legal/ADDITIONAL-PERMISSION.txt", "Publisher use permission"],
+              ["/legal/MIT.txt", "MIT client license"],
+              ["/legal/0BSD.txt", "Generated client code license"],
+              ["/legal/NOTICE.txt", "Project notices"],
+              ["/legal/THIRD-PARTY.txt", "Browser dependency notices"],
+            ] as const
+          ).map(([href, label]) =>
+            h("li", h("a", { href: applicationAsset(href) }, label)),
+          ),
         ),
         paragraph(
           "The source package contains reviewed project files and build instructions. Deployment secrets, customer records and private software releases are not included. Self-hosting does not require a platform subscription or a Redis server; your payment, storage and email providers may charge separately.",
@@ -1433,7 +1446,11 @@ export function publicDocs(
       ]),
       h("div", { class: "docs-end" }, [
         paragraph("Ready to publish your first release?"),
-        h("a", { href: "/seller" }, "Open your seller dashboard →"),
+        h(
+          "a",
+          { href: applicationHref("/seller") },
+          "Open your seller dashboard →",
+        ),
         h("a", { href: "#main" }, "Back to top ↑"),
       ]),
     ]),

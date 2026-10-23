@@ -13,17 +13,18 @@ a present empty string; omit optional price/account IDs until configured.
 
 ## Deployment and identity
 
-| Variable                    | Default                 | Constraint / purpose                                                                                                 |
-| --------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                  | Unset                   | Exact `production` enables production requirements.                                                                  |
-| `DEPLOYMENT_MODE`           | `standalone`            | `standalone` or `hosted`; does not migrate a database.                                                               |
-| `PUBLIC_ORIGIN`             | `http://localhost:3211` | HTTP(S) origin only, no credentials/path/query/fragment; HTTPS in production. Also used by the Compose proxy.        |
-| `PORT`                      | `3211`                  | Integer 0-65535; 0 is useful for isolated tests.                                                                     |
-| `STANDALONE_OWNER_EMAIL`    | Empty                   | Required in standalone production; normalized email allowed to sign in as owner.                                     |
-| `APP_SECRET`                | Required                | Exactly 64 hexadecimal characters. Protect and back up for encrypted retry/outbox state.                             |
-| `OPERATOR_TOKEN`            | Required                | At least 32 characters; independent from seller keys and `APP_SECRET`.                                               |
-| `TRUST_PROXY`               | Disabled                | Required in production; identify the exact trusted proxy/subnet. Blanket `true`, `0.0.0.0/0` and `::/0` are refused. |
-| `DEVELOPMENT_HOST_SUFFIXES` | Empty                   | Comma-separated explicit host/suffix exemptions for site seat accounting. Exact or dot-delimited matching.           |
+| Variable                    | Default                         | Constraint / purpose                                                                                                    |
+| --------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                  | Unset                           | Exact `production` enables production requirements.                                                                     |
+| `DEPLOYMENT_MODE`           | `standalone`                    | `standalone` or `hosted`; does not migrate a database.                                                                  |
+| `PUBLIC_ORIGIN`             | `http://localhost:3211`         | HTTP(S) origin only, no credentials/path/query/fragment; HTTPS in production. Also used by the Compose proxy.           |
+| `APP_BASE_PATH`             | Empty standalone; `/app` hosted | Prefix generated account and billing links, for example `/app`. Match the frontend mount. API endpoints stay at `/api`. |
+| `PORT`                      | `3211`                          | Integer 0-65535; 0 is useful for isolated tests.                                                                        |
+| `STANDALONE_OWNER_EMAIL`    | Empty                           | Required in standalone production; normalized email allowed to sign in as owner.                                        |
+| `APP_SECRET`                | Required                        | Exactly 64 hexadecimal characters. Protect and back up for encrypted retry/outbox state.                                |
+| `OPERATOR_TOKEN`            | Required                        | At least 32 characters; independent from seller keys and `APP_SECRET`.                                                  |
+| `TRUST_PROXY`               | Disabled                        | Required in production; identify the exact trusted proxy/subnet. Blanket `true`, `0.0.0.0/0` and `::/0` are refused.    |
+| `DEVELOPMENT_HOST_SUFFIXES` | Empty                           | Comma-separated explicit host/suffix exemptions for site seat accounting. Exact or dot-delimited matching.              |
 
 Standalone startup refuses a hosted database with unrelated tenants or connected
 account/platform billing mappings. Keep hosted databases in hosted mode. Do not
@@ -31,15 +32,15 @@ delete records to bypass the guard. An isolated sandbox child is supported.
 
 ## Database and filesystem
 
-| Variable               | Default                                         | Purpose                                                                                                                       |
-| ---------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Variable               | Default                               | Purpose                                                                                                                       |
+| ---------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `DATA_DIR`             | `/Volumes/Scratch/entitle/data/local` | Base for default SQLite and work paths. Set explicitly outside local macOS development.                                       |
-| `DATABASE_URL`         | `sqlite:DATA_DIR/entitle.sqlite`                | SQLite, PostgreSQL or MySQL connection. Use a persistent private database.                                                    |
-| `WORK_DIR`             | `DATA_DIR/work`                                 | Private artifact spools, verified cache and export work; must be outside public static files.                                 |
+| `DATABASE_URL`         | `sqlite:DATA_DIR/entitle.sqlite`      | SQLite, PostgreSQL or MySQL connection. Use a persistent private database.                                                    |
+| `WORK_DIR`             | `DATA_DIR/work`                       | Private artifact spools, verified cache and export work; must be outside public static files.                                 |
 | `BUILD_DIR`            | `/Volumes/Scratch/entitle/build/main` | Build output and fallback base for built web assets.                                                                          |
-| `WEB_DIR`              | `BUILD_DIR/web`                                 | Static frontend directory served by the app.                                                                                  |
-| `ENTITLE_DATA_DIR`     | Required by Compose interpolation               | Host persistent volume path; Compose setting, not a `loadConfig` variable.                                                    |
-| `ENTITLE_MEMORY_LIMIT` | `768m`                                          | Compose application container memory limit; reserve enough for Node/database overhead as well as configured transfer buffers. |
+| `WEB_DIR`              | `BUILD_DIR/web`                       | Static frontend directory served by the app.                                                                                  |
+| `ENTITLE_DATA_DIR`     | Required by Compose interpolation     | Host persistent volume path; Compose setting, not a `loadConfig` variable.                                                    |
+| `ENTITLE_MEMORY_LIMIT` | `768m`                                | Compose application container memory limit; reserve enough for Node/database overhead as well as configured transfer buffers. |
 
 The Docker deployment uses `DATA_DIR=/data`, `WORK_DIR=/data/work`,
 `WEB_DIR=/app/dist/web` and a writable host volume owned by UID/GID 1000.
@@ -80,15 +81,15 @@ fails validation. Fixture sandboxes need no Stripe test keys.
 
 ## Private S3 storage
 
-| Variable               | Default                | Constraint / purpose                                                                   |
-| ---------------------- | ---------------------- | -------------------------------------------------------------------------------------- |
+| Variable               | Default         | Constraint / purpose                                                                   |
+| ---------------------- | --------------- | -------------------------------------------------------------------------------------- |
 | `S3_BUCKET`            | `entitle-local` | Explicitly required in production. Keep bucket and objects private.                    |
-| `S3_REGION`            | `us-east-1`            | Explicitly required in production.                                                     |
-| `S3_ENDPOINT`          | Omitted                | Custom HTTP(S) endpoint without credentials/query/fragment. Production requires HTTPS. |
-| `S3_ACCESS_KEY_ID`     | Omitted                | Supply together with secret, or use the SDK credential chain.                          |
-| `S3_SECRET_ACCESS_KEY` | Omitted                | Private credential; must accompany access key when explicitly configured.              |
-| `S3_FORCE_PATH_STYLE`  | `false`                | Enable only when required by the provider.                                             |
-| `S3_ALLOW_HTTP`        | `false`                | Allows an HTTP fixture endpoint only outside production.                               |
+| `S3_REGION`            | `us-east-1`     | Explicitly required in production.                                                     |
+| `S3_ENDPOINT`          | Omitted         | Custom HTTP(S) endpoint without credentials/query/fragment. Production requires HTTPS. |
+| `S3_ACCESS_KEY_ID`     | Omitted         | Supply together with secret, or use the SDK credential chain.                          |
+| `S3_SECRET_ACCESS_KEY` | Omitted         | Private credential; must accompany access key when explicitly configured.              |
+| `S3_FORCE_PATH_STYLE`  | `false`         | Enable only when required by the provider.                                             |
+| `S3_ALLOW_HTTP`        | `false`         | Allows an HTTP fixture endpoint only outside production.                               |
 
 Publication depends on conditional immutable writes and verified readback.
 Validate those semantics with the actual provider. The readiness check verifies
@@ -168,12 +169,12 @@ hits still authorize every request. See [deployment transfer details](deployment
 
 ## Optional caches and outbound destinations
 
-| Variable                 | Default          | Constraint / purpose                                                                                            |
-| ------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| `CACHE_REDIS_URL`        | Omitted          | `redis://` or `rediss://`, no query/fragment; only price-picker cache uses Redis.                               |
-| `CACHE_MEMORY_MIB`       | `8`              | 1-256 MiB bounded presentation cache.                                                                           |
-| `CACHE_NAMESPACE`        | `entitle` | 1-64 alphanumeric, colon, underscore or hyphen characters. Separate deployments should use distinct namespaces. |
-| `OUTBOUND_WEBHOOK_HOSTS` | Omitted          | Optional restriction. When set, only these exact public DNS names are accepted, comma-separated; no wildcards or private-address bypass.        |
+| Variable                 | Default   | Constraint / purpose                                                                                                                     |
+| ------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `CACHE_REDIS_URL`        | Omitted   | `redis://` or `rediss://`, no query/fragment; only price-picker cache uses Redis.                                                        |
+| `CACHE_MEMORY_MIB`       | `8`       | 1-256 MiB bounded presentation cache.                                                                                                    |
+| `CACHE_NAMESPACE`        | `entitle` | 1-64 alphanumeric, colon, underscore or hyphen characters. Separate deployments should use distinct namespaces.                          |
+| `OUTBOUND_WEBHOOK_HOSTS` | Omitted   | Optional restriction. When set, only these exact public DNS names are accepted, comma-separated; no wildcards or private-address bypass. |
 
 Presentation caching never supplies entitlement. Feed formatting stays in trusted
 process memory; verified native bytes use the separate disk cache above. A Redis

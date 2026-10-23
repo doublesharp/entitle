@@ -31,6 +31,7 @@ services:
       ENTITLE_API_UPSTREAM: app:3211
       ENTITLE_PUBLIC_HOST: ${ENTITLE_PUBLIC_HOST:?Set the hostname matching PUBLIC_ORIGIN}
       ENTITLE_PUBLIC_SCHEME: https
+      ENTITLE_APP_BASE_PATH: ${ENTITLE_APP_BASE_PATH:-/app}
       ENTITLE_TRUSTED_PROXY_CIDRS: 172.30.81.2/32
     volumes:
       - ${ENTITLE_WEB_RELEASE_DIR:?Set an absolute activated frontend release directory}:/releases:ro

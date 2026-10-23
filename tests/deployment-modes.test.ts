@@ -131,3 +131,19 @@ test("standalone merchant webhook routes verified events to primary and rejects 
   await createTenant(db, { id: "injected", slug: "injected", name: "Injected" });
   assert.equal((await app.inject({ url: "/api/v1/tenants/injected/catalog" })).statusCode, 404);
 });
+
+
+test("public runtime info reports the application mount without changing API paths", async t => {
+  const { app, config } = await fixture(t);
+  const info = async () => {
+    const response = await app.inject("/api/v1/platform/info");
+    assert.equal(response.statusCode, 200);
+    return response.json();
+  };
+  assert.equal((await info()).appBasePath, "");
+  config.appBasePath = "/app";
+  assert.equal((await info()).appBasePath, "/app");
+  delete config.appBasePath;
+  assert.equal((await info()).appBasePath, "");
+  assert.equal((await app.inject("/app/api/v1/platform/info")).statusCode, 404);
+});

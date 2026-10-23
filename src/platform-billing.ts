@@ -1,3 +1,4 @@
+import { appUrl, normalizeAppBasePath } from "../packages/shared/app-path.ts";
 import Stripe from "stripe";
 import { randomUUID } from "node:crypto";
 import type { DB, Tenant, Tx } from "./db.ts";
@@ -65,6 +66,7 @@ export class PlatformBilling {
   readonly config: PlatformConfig;
   stripe: Stripe;
   private portalConfigurationId: string | undefined;
+  private portalConfigurationReturnUrl: string | undefined;
   constructor(db: DB, config: PlatformConfig, stripe?: Stripe) {
     this.db = db;
     this.config = config;
@@ -524,8 +526,8 @@ export class PlatformBilling {
           customer: guard.customer_id,
           client_reference_id: guard.id,
           line_items: [{ price: guard.price_id, quantity: 1 }],
-          success_url: `${this.config.origin}/seller?billing=success`,
-          cancel_url: `${this.config.origin}/seller?billing=canceled`,
+          success_url: appUrl(this.config, "/seller?billing=success"),
+          cancel_url: appUrl(this.config, "/seller?billing=canceled"),
           allow_promotion_codes: false,
           // Persisted attempt time keeps retries byte-identical for Stripe's
           // idempotency key. Allow five minutes beyond its 30-minute minimum.
@@ -613,11 +615,16 @@ export class PlatformBilling {
     const session = await this.stripe.billingPortal.sessions.create({
       configuration,
       customer: current.platform_customer_id,
-      return_url: `${this.config.origin}/seller`,
+      return_url: appUrl(this.config, "/seller"),
     });
     return { url: session.url };
   }
   private async safePortalConfiguration(): Promise<string> {
+    const returnUrl = appUrl(this.config, "/seller");
+    if (this.portalConfigurationReturnUrl !== returnUrl) {
+      this.portalConfigurationId = undefined;
+      this.portalConfigurationReturnUrl = returnUrl;
+    }
     if (!this.portalConfigurationId) {
       // Provider metadata and return URL identify this deployment's dedicated
       // policy across restarts, beyond create's idempotency retention window.
@@ -633,7 +640,7 @@ export class PlatformBilling {
           !candidate.is_default &&
           candidate.livemode === (this.config.stripeLiveMode ?? false) &&
           candidate.metadata?.double_entitle_policy === "period_end_v1" &&
-          candidate.default_return_url === `${this.config.origin}/seller`
+          candidate.default_return_url === returnUrl
         ) {
           this.portalConfigurationId = candidate.id;
           break;
@@ -655,11 +662,13 @@ export class PlatformBilling {
             subscription_update: { enabled: false },
           },
           login_page: { enabled: false },
-          default_return_url: `${this.config.origin}/seller`,
+          default_return_url: returnUrl,
           metadata: { double_entitle_policy: "period_end_v1" },
         },
         {
-          idempotencyKey: `double-entitle-safe-portal-v1-${hash(this.config.origin)}`,
+          idempotencyKey: `double-entitle-safe-portal-v1-${hash(
+            `${this.config.origin}${normalizeAppBasePath(this.config.appBasePath)}`,
+          )}`,
         },
       );
       check(
@@ -683,7 +692,7 @@ export class PlatformBilling {
         configuration.active &&
         !configuration.is_default &&
         configuration.metadata?.double_entitle_policy === "period_end_v1" &&
-        configuration.default_return_url === `${this.config.origin}/seller` &&
+        configuration.default_return_url === returnUrl &&
         !configuration.login_page.enabled &&
         features.subscription_update.enabled === false &&
         features.subscription_cancel.enabled === true &&

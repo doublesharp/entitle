@@ -32,10 +32,9 @@ for (const name of [
   });
 dom.document.body.innerHTML = '<div id="app"></div>';
 const ui = await import("../web/main.ts");
+const marketing = await import("../web/marketing.ts");
 const { nextTick } = await import("vue");
-let app = (
-  dom.document.querySelector("#app") as unknown as { __vue_app__: App }
-).__vue_app__;
+let app: App | undefined;
 const tenant: Tenant = {
   id: "tenant-a",
   slug: "alpha",
@@ -270,7 +269,10 @@ async function mount(path = "/seller", configure?: () => void) {
       },
     },
   });
-  app = ui.mountSiteApp("#app", fetcher);
+  app =
+    path === "/"
+      ? marketing.mountPublicSite("#app")
+      : ui.mountSiteApp("#app", fetcher);
   await flush();
 }
 afterEach(() => app?.unmount());
@@ -1014,7 +1016,7 @@ test("empty email fragments stay unusable and unmount removes the seller watcher
   assert.equal(dom.location.hash, "");
   assert.equal(button("Confirm seller sign in").disabled, true);
   await click("Cancel sign in");
-  app.unmount();
+  app?.unmount();
   dom.location.hash = "#seller-login=after-unmount";
   dom.dispatchEvent(new dom.HashChangeEvent("hashchange"));
   assert.equal(dom.location.hash, "#seller-login=after-unmount");
@@ -2420,4 +2422,60 @@ test("a resend completed after its form unmounts clears that exact stale handoff
   await flush();
   await click("Export");
   assert.equal(el<HTMLInputElement>("#verification-token").value, "");
+});
+
+test("hosted seller routes use the configured application mount and keep API paths unchanged", async () => {
+  const meta = dom.document.createElement("meta");
+  meta.name = "entitle-app-base";
+  meta.content = "/app";
+  dom.document.head.append(meta);
+  try {
+    await mount("/app/seller");
+    assert.match(text(), /Your workspace in numbers/);
+    assert.ok(dom.document.querySelector('header a[href="/app/"]'));
+    assert.ok(dom.document.querySelector('header a[href="/app/docs"]'));
+    assert.ok(calls.some((call) => call.path === "/api/v1/platform/me"));
+    assert.ok(calls.every((call) => !call.path.startsWith("/app/api/")));
+    await mount("/app/docs");
+    assert.ok(
+      dom.document.querySelector('a[href="/app/legal/THIRD-PARTY.txt"]'),
+    );
+  } finally {
+    meta.remove();
+  }
+});
+
+test("marketing documentation is static and points account actions to the configured app", async () => {
+  await mount("/");
+  app?.unmount();
+  dom.history.replaceState(null, "", "/docs");
+  calls = [];
+  const meta = dom.document.createElement("meta");
+  meta.name = "entitle-app-url";
+  meta.content = "/app/";
+  dom.document.head.append(meta);
+  try {
+    app = marketing.mountPublicSite("#app");
+    await flush();
+    assert.equal(calls.length, 0);
+    assert.match(text(), /Documentation/);
+    assert.doesNotMatch(text(), /Loading server limits/);
+    assert.ok(dom.document.querySelector('a[href="/app/seller"]'));
+    assert.ok(dom.document.querySelector('a[href="/app/docs#server-limits"]'));
+    app.unmount();
+    meta.content = "https://app.example.test/";
+    app = marketing.mountPublicSite("#app");
+    await flush();
+    assert.ok(dom.document.querySelector('a[href="/legal/THIRD-PARTY.txt"]'));
+    assert.match(
+      el('pre[aria-label="Shell / WordPress publication"]').textContent ?? "",
+      /export PUBLIC_ORIGIN=https:\/\/app.example.test/,
+    );
+    assert.match(
+      el('pre[aria-label="Shell / public health probes"]').textContent ?? "",
+      /curl --fail https:\/\/app.example.test\/api\/v1\/ready/,
+    );
+  } finally {
+    meta.remove();
+  }
 });

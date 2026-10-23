@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tool = path.join(repo, "scripts/deployment/frontend-release.mjs");
-const scratch = "/Volumes/Scratch/entitle/tmp/frontend-release";
+const scratch =
+  process.env.FRONTEND_RELEASE_TMPDIR ??
+  "/Volumes/Scratch/entitle/tmp/frontend-release";
 const sha = "a".repeat(40);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -24,7 +26,7 @@ test(
     );
     const output = path.join(process.env.BUILD_DIR, "web");
     const titles = new Set();
-    for (const page of ["home", "docs", "seller", "customer"]) {
+    for (const page of ["docs", "seller", "customer"]) {
       const html = await fs.readFile(
         path.join(output, page === "home" ? "index.html" : `${page}.html`),
         "utf8",
@@ -43,7 +45,7 @@ test(
       assert.equal(png.readUInt32BE(20), 630);
       assert.doesNotMatch(html, /PAGE_METADATA|%SITE_/);
     }
-    assert.equal(titles.size, 4);
+    assert.equal(titles.size, 3);
   },
 );
 
@@ -743,6 +745,8 @@ test(
         path.join(f.input, `${page}.html`),
         `<html>${page} preview</html>`,
       );
+    const requests = [];
+    const commands = [];
     const suffix = `${process.pid}-${Date.now()}`;
     const image = `entitle-runtime-smoke:${suffix}`;
     const network = `entitle-runtime-${suffix}`;
@@ -755,14 +759,53 @@ test(
         encoding: "utf8",
         timeout: 120000,
       });
+      commands.push({
+        args,
+        status: result.status,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
       assert.equal(result.status, 0, `${args[0]}: ${result.stderr}`);
       return (result.stdout + (args[0] === "logs" ? result.stderr : "")).trim();
     }
-    t.after(() => {
-      spawnSync("docker", ["rm", "-f", runtime, backend, ingress]);
-      spawnSync("docker", ["network", "rm", network]);
-      spawnSync("docker", ["volume", "rm", volume]);
-      spawnSync("docker", ["image", "rm", image]);
+    t.after(async () => {
+      try {
+        if (process.env.FRONTEND_RUNTIME_REPORT_DIR) {
+          const report = process.env.FRONTEND_RUNTIME_REPORT_DIR;
+          await fs.mkdir(report, { recursive: true });
+          await fs.writeFile(
+            path.join(report, "requests.json"),
+            JSON.stringify(requests, null, 2) + "\n",
+          );
+          for (const name of [runtime, backend, ingress]) {
+            const logs = spawnSync("docker", ["logs", name], {
+              encoding: "utf8",
+            });
+            await fs.writeFile(
+              path.join(report, `${name}.log`),
+              logs.stdout + logs.stderr,
+            );
+          }
+          const config = spawnSync(
+            "docker",
+            ["exec", runtime, "cat", "/runtime/nginx.conf"],
+            { encoding: "utf8" },
+          );
+          await fs.writeFile(
+            path.join(report, "nginx.conf"),
+            config.stdout + config.stderr,
+          );
+          await fs.writeFile(
+            path.join(report, "docker-commands.json"),
+            JSON.stringify(commands, null, 2) + "\n",
+          );
+        }
+      } finally {
+        spawnSync("docker", ["rm", "-f", runtime, backend, ingress]);
+        spawnSync("docker", ["network", "rm", network]);
+        spawnSync("docker", ["volume", "rm", volume]);
+        spawnSync("docker", ["image", "rm", image]);
+      }
     });
     docker(
       "build",
@@ -816,6 +859,30 @@ test(
         message: /Invalid ENTITLE_TRUSTED_PROXY_CIDRS/,
       });
     }
+    for (const prefix of [
+      "app",
+      "/",
+      "/app/",
+      "//app",
+      "/app//seller",
+      "/app/../seller",
+      "/app?query=1",
+      "/app#fragment",
+      "/app.assets",
+      "/app assets",
+      "/app; return 200 injected;",
+      "/app\ninclude /evil;",
+      `/${"a".repeat(128)}`,
+    ]) {
+      invalidConfigurations.push({
+        title: `invalid app prefix ${JSON.stringify(prefix)}`,
+        env: [
+          "ENTITLE_PUBLIC_HOST=entitle.example",
+          `ENTITLE_APP_BASE_PATH=${prefix}`,
+        ],
+        message: /Invalid ENTITLE_APP_BASE_PATH/,
+      });
+    }
     for (let i = 0; i < invalidConfigurations.length; i++) {
       const invalid = invalidConfigurations[i];
       await t.test(invalid.title, () => {
@@ -837,9 +904,14 @@ test(
             ...invalid.env.flatMap((entry) => ["-e", entry]),
             image,
           ],
-          { encoding: "utf8", timeout: 2500 },
+          { encoding: "utf8", timeout: 15000 },
         );
         spawnSync("docker", ["rm", "-f", name]);
+        commands.push({
+          configuration: invalid.title,
+          status: result.status,
+          stderr: result.stderr,
+        });
         assert.equal(
           result.status,
           1,
@@ -922,7 +994,7 @@ location / { default_type application/json; return 404 '{"error":"api_not_found"
     );
     const a = f.pack();
     promote(a);
-    function startRuntime(cidrs = "") {
+    function startRuntime(cidrs = "", basePath) {
       docker(
         "run",
         "-d",
@@ -945,6 +1017,9 @@ location / { default_type application/json; return 404 '{"error":"api_not_found"
         "ENTITLE_PUBLIC_HOST=entitle.example",
         "-e",
         `ENTITLE_TRUSTED_PROXY_CIDRS=${cidrs}`,
+        ...(basePath === undefined
+          ? []
+          : ["-e", `ENTITLE_APP_BASE_PATH=${basePath}`]),
         image,
       );
     }
@@ -970,16 +1045,99 @@ location / { default_type application/json; return 404 '{"error":"api_not_found"
           ...headers.flatMap((header) => ["--header", header]),
           `${address}${uri}`,
         ],
-        { encoding: "utf8" },
+        { timeout: 5000 },
       );
-      const status = Number(result.stderr.match(/HTTP\/1\.1 (\d+)/)?.[1]);
+      const stderr = result.stderr?.toString() ?? "";
+      const status = Number(stderr.match(/HTTP\/1\.1 (\d+)/)?.[1]);
       const parsed = Object.fromEntries(
-        [...result.stderr.matchAll(/^\s+([A-Za-z-]+): (.*)$/gm)].map(
-          (match) => [match[1].toLowerCase(), match[2].trim()],
-        ),
+        [...stderr.matchAll(/^\s+([A-Za-z-]+): (.*)$/gm)].map((match) => [
+          match[1].toLowerCase(),
+          match[2].trim(),
+        ]),
       );
-      return { status, headers: parsed, body: result.stdout };
+      const bytes = result.stdout ?? Buffer.alloc(0);
+      const response = {
+        status,
+        headers: parsed,
+        body: bytes.toString(),
+        bytes,
+      };
+      requests.push({
+        uri,
+        host,
+        client,
+        address,
+        status,
+        headers: parsed,
+        body: response.body,
+        bodySha256: digest(bytes),
+        error: result.error?.message,
+        stderr,
+      });
+      return response;
     }
+    let inspectionCount = 0;
+    function inspectResponses(uris) {
+      // BusyBox wget follows redirects and omits error-response headers.
+      // Batch probes in Node to inspect first responses without container churn.
+      const name = `${runtime}-inspect-${++inspectionCount}`;
+      const result = spawnSync(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "--name",
+          name,
+          "--network",
+          `container:${runtime}`,
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--entrypoint",
+          "node",
+          "node:26.12.0-alpine",
+          "--input-type=module",
+          "--eval",
+          `import http from "node:http";
+const results = [];
+try {
+  for (const uri of JSON.parse(process.argv[1])) {
+    results.push(await new Promise((resolve, reject) => {
+      const req = http.get(new URL(uri, "http://127.0.0.1:8080"),
+        { headers: { host: "entitle.example" } }, (res) => {
+          const chunks = [];
+          res.on("error", reject);
+          res.on("data", (chunk) => chunks.push(chunk));
+          res.on("end", () => resolve({
+            status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString(),
+          }));
+        });
+      req.setTimeout(3000, () => req.destroy(new Error("response inspection timeout")));
+      req.on("error", reject);
+    }));
+  }
+  console.log(JSON.stringify(results));
+} catch (error) { console.error(error.message); process.exitCode = 1; }`,
+          JSON.stringify(uris),
+        ],
+        { encoding: "utf8", timeout: 30000 },
+      );
+      if (result.status !== 0) spawnSync("docker", ["rm", "-f", name]);
+      assert.equal(result.status, 0, `${result.error ?? result.stderr}`);
+      const responses = JSON.parse(result.stdout);
+      assert.equal(responses.length, uris.length);
+      requests.push(
+        ...responses.map((response, index) => ({
+          uri: uris[index],
+          ...response,
+          followRedirects: false,
+        })),
+      );
+      return responses;
+    }
+
     let home;
     for (let i = 0; i < 30; i++) {
       home = request("/");
@@ -1170,6 +1328,228 @@ proxy_set_header Forwarded "host=attacker.example;proto=http";
     t.diagnostic(
       `untrusted direct client: forged 192.0.2.99 ignored; backend received TCP peer ${directIp}`,
     );
+    // Hosted archives keep marketing at the root and physical app files in
+    // app/, regardless of the configured public URL prefix.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN2QAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const hostedFiles = {
+      "index.html": "<html>marketing preview</html>",
+      "docs.html": "<html>marketing docs preview</html>",
+      "assets/marketing.js": "console.log('marketing');",
+      "assets/app-hosted.js": "console.log('hosted app');",
+      "app/assets/app-hosted.js": "console.log('hosted app');",
+      "app/index.html": "<html>app dashboard preview</html>",
+      "app/seller.html": "<html>app seller preview</html>",
+      "app/docs.html": "<html>app docs preview</html>",
+      "app/customer.html": "<html>app customer preview</html>",
+      "app/social/seller.png": png,
+      "app/legal/THIRD-PARTY.txt": "app third-party notices",
+      "app/favicon.svg":
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>app icon</title></svg>',
+      "app/release-manifest.json":
+        '{"private":"nested manifest must stay hidden"}',
+    };
+    for (const [name, bytes] of Object.entries(hostedFiles)) {
+      await fs.mkdir(path.dirname(path.join(f.input, name)), {
+        recursive: true,
+      });
+      await fs.writeFile(path.join(f.input, name), bytes);
+    }
+    const hosted = f.pack("hosted.tar");
+    promote(hosted);
+    const hiddenFiles = [
+      "/releases/current/.env",
+      "/releases/current/app/.env",
+      "/releases/current/app/social/.env",
+      "/releases/current/app/legal/.env",
+      "/releases/shared/assets/.env",
+    ];
+    function hiddenFixtures(action) {
+      docker(
+        "run",
+        "--rm",
+        "--name",
+        `${runtime}-hidden-${action}`,
+        "--network",
+        "none",
+        "--read-only",
+        "--mount",
+        `type=volume,src=${volume},dst=/releases`,
+        "--entrypoint",
+        "node",
+        "node:26.12.0-alpine",
+        "--input-type=module",
+        "--eval",
+        `import fs from "node:fs/promises";
+for (const file of JSON.parse(process.argv[2])) {
+  if (process.argv[1] === "write") await fs.writeFile(file, "hidden-runtime-fixture");
+  else await fs.rm(file, { force: true });
+}`,
+        action,
+        JSON.stringify(hiddenFiles),
+      );
+    }
+    hiddenFixtures("write");
+    const hostedRoutes = (base) => [
+      ["/", hostedFiles["index.html"]],
+      ["/docs", hostedFiles["docs.html"]],
+      ["/docs/", hostedFiles["docs.html"]],
+      [`${base}/`, hostedFiles["app/index.html"]],
+      [`${base}/seller`, hostedFiles["app/seller.html"]],
+      [`${base}/seller/`, hostedFiles["app/seller.html"]],
+      [`${base}/docs`, hostedFiles["app/docs.html"]],
+      [`${base}/docs/`, hostedFiles["app/docs.html"]],
+      [`${base}/t/alpha`, hostedFiles["app/customer.html"]],
+      [`${base}/t/alpha/`, hostedFiles["app/customer.html"]],
+    ];
+    async function checkHosted(base) {
+      await t.test(`hosted marketing and app pages at ${base}`, () => {
+        for (const [uri, body] of hostedRoutes(base)) {
+          const response = request(uri);
+          assert.equal(response.status, 200, uri);
+          assert.equal(response.body, body, uri);
+          assert.equal(response.headers["referrer-policy"], "no-referrer", uri);
+          assert.equal(
+            response.headers["x-content-type-options"],
+            "nosniff",
+            uri,
+          );
+          assert.match(response.headers["cache-control"], /no-cache/, uri);
+          assert.match(
+            response.headers["content-security-policy"],
+            /object-src 'none'/,
+            uri,
+          );
+        }
+      });
+      await t.test(
+        `hosted redirects preserve queries and use relative Location at ${base}`,
+        () => {
+          const cases = [
+            [base, `${base}/`],
+            ["/seller", `${base}/seller`],
+            ["/seller/", `${base}/seller/`],
+            ["/t/alpha", `${base}/t/alpha`],
+            ["/t/alpha/", `${base}/t/alpha/`],
+          ];
+          const query = "?token=one%2Ftwo&return=%2Fdocs&same=1&same=2";
+          const responses = inspectResponses(
+            cases.map(([from]) => `${from}${query}#browser-only-secret`),
+          );
+          for (const [index, [from, to]] of cases.entries()) {
+            const response = responses[index];
+            assert.equal(response.status, 308, from);
+            assert.equal(response.headers.location, `${to}${query}`, from);
+            assert.equal(request(response.headers.location).status, 200, to);
+          }
+        },
+      );
+      await t.test(
+        `shared immutable assets and app static files at ${base}`,
+        () => {
+          for (const [asset, body] of [
+            ["app-one.js", "console.log(1);"],
+            ["app-hosted.js", hostedFiles["assets/app-hosted.js"]],
+            ["marketing.js", hostedFiles["assets/marketing.js"]],
+          ]) {
+            for (const prefix of ["", base]) {
+              const uri = `${prefix}/assets/${asset}`;
+              const response = request(uri);
+              assert.equal(response.status, 200, uri);
+              assert.equal(response.body, body, uri);
+              assert.match(
+                response.headers["cache-control"],
+                /max-age=31536000, immutable/,
+                uri,
+              );
+            }
+          }
+          for (const name of [
+            "social/seller.png",
+            "legal/THIRD-PARTY.txt",
+            "favicon.svg",
+          ]) {
+            const uri = `${base}/${name}`;
+            const response = request(uri);
+            assert.equal(response.status, 200, uri);
+            assert.deepEqual(
+              response.bytes,
+              Buffer.from(hostedFiles[`app/${name}`]),
+              uri,
+            );
+            assert.match(response.headers["cache-control"], /no-cache/, uri);
+          }
+        },
+      );
+      await t.test(
+        `missing files, manifests and dotfiles stay hidden at ${base}`,
+        async (t) => {
+          const uris = [
+            "/release-manifest.json",
+            "/app/release-manifest.json",
+            `${base}/release-manifest.json`,
+            "/.env",
+            `${base}/.env`,
+            `${base}/nested/.env`,
+            "/assets/.env",
+            `${base}/assets/.env`,
+            `${base}/social/.env`,
+            `${base}/legal/.env`,
+            `${base}/assets/missing.js`,
+            `${base}/social/missing.png`,
+            `${base}/legal/missing.txt`,
+            `${base}/unknown-route`,
+            `${base}/t/alpha/extra`,
+          ];
+          const responses = inspectResponses(uris);
+          for (const [index, uri] of uris.entries()) {
+            await t.test(uri, () => {
+              const response = responses[index];
+              assert.equal(response.status, 404, uri);
+              assert.doesNotMatch(
+                response.headers["cache-control"],
+                /immutable/,
+                uri,
+              );
+            });
+          }
+        },
+      );
+      await t.test(`API stays at /api with the app at ${base}`, () => {
+        const response = request(
+          "/api/echo?unchanged=one%2Ftwo&same=1&same=2",
+          ["Cookie: seller_session=split", "Authorization: Bearer split"],
+        );
+        assert.equal(response.status, 200);
+        const echo = JSON.parse(response.body);
+        assert.equal(echo.uri, "/api/echo?unchanged=one%2Ftwo&same=1&same=2");
+        assert.equal(echo.cookie, "seller_session=split");
+        assert.equal(echo.authorization, "Bearer split");
+        assert.equal(echo.host, "entitle.example");
+        assert.equal(echo.proto, "https");
+        assert.match(response.headers["set-cookie"], /seller_session=smoke/);
+        assert.equal(request(`${base}/api/echo`).status, 404);
+        assert.equal(request("/api/missing").status, 404);
+      });
+    }
+    try {
+      await checkHosted("/app");
+      docker("rm", "-f", runtime);
+      startRuntime(`${ingressIp}/32,::1/128`, "/console");
+      for (let i = 0; i < 30 && request("/").status !== 200; i++)
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      await checkHosted("/console");
+    } finally {
+      hiddenFixtures("remove");
+    }
+    // Return to the default mount before exercising legacy publication fallback.
+    docker("rm", "-f", runtime);
+    startRuntime(`${ingressIp}/32,::1/128`);
+    for (let i = 0; i < 30 && request("/").status !== 200; i++)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    await fs.rm(path.join(f.input, "app"), { recursive: true });
     // A release from before page-specific shells must still work on this runtime.
     for (const page of ["docs", "seller", "customer"])
       await fs.rm(path.join(f.input, `${page}.html`));
@@ -1193,8 +1573,46 @@ proxy_set_header Forwarded "host=attacker.example;proto=http";
     );
     assert.equal(request("/assets/app-one.js").body, "console.log(1);");
     assert.equal(request("/assets/app-two.js").body, "console.log(2);");
-    for (const uri of ["/docs", "/seller/", "/t/example/"])
-      assert.equal(request(uri).body, "<html>release two</html>");
+    for (const uri of [
+      "/docs",
+      "/seller",
+      "/seller/",
+      "/t/alpha",
+      "/t/alpha/",
+    ]) {
+      const response = request(uri + "?token=legacy");
+      assert.equal(response.status, 200, uri);
+      assert.equal(response.body, "<html>release two</html>", uri);
+      assert.equal(response.headers.location, undefined, uri);
+    }
+    t.diagnostic(
+      "hosted -> standalone activation restores legacy seller and tenant app shells without redirects",
+    );
+    await t.test(
+      "legacy standalone release redirects app-prefixed account links during rollback",
+      async (t) => {
+        const query = "?token=legacy%2Fsecret&return=%2Fdocs&same=1&same=2";
+        const cases = [
+          ["/app/", "/seller"],
+          ["/app/seller", "/seller"],
+          ["/app/docs", "/docs"],
+          ["/app/t/alpha", "/t/alpha"],
+        ];
+        const responses = inspectResponses(
+          cases.map(([from]) => `${from}${query}#browser-only-secret`),
+        );
+        for (const [index, [from, to]] of cases.entries()) {
+          await t.test(from, () => {
+            const response = responses[index];
+            assert.equal(response.status, 308, from);
+            assert.equal(response.headers.location, `${to}${query}`, from);
+            const destination = request(response.headers.location);
+            assert.equal(destination.status, 200, to);
+            assert.equal(destination.body, "<html>release two</html>", to);
+          });
+        }
+      },
+    );
     publish("rollback", "--root", "/releases", "--release", a.releaseId);
     assert.equal(request("/").body, "<html>release one</html>");
     assert.equal(request("/docs").body, "<html>docs preview</html>");

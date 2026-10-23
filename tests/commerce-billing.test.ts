@@ -19,6 +19,7 @@ const fixture = await isolatedDatabase(`sqlite:${root}/db`),
 const config = {
   ...loadConfig({
     DEPLOYMENT_MODE: "hosted",
+    APP_BASE_PATH: "",
     APP_SECRET: "55".repeat(32),
     OPERATOR_TOKEN: "x".repeat(32),
   }),
