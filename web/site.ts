@@ -590,6 +590,58 @@ const publicHome = () => [
   h(
     "section",
     {
+      class: "home-section home-resources",
+      "aria-labelledby": "explore-title",
+    },
+    [
+      h("div", [
+        h("div", { class: "home-section-heading" }, [
+          h("p", { class: "eyebrow" }, "Explore Entitle"),
+          h("h2", { id: "explore-title" }, "Find your next step."),
+        ]),
+        h(
+          "ul",
+          { class: "home-resource-links" },
+          [
+            {
+              href: "/seller",
+              title: "Open your seller dashboard",
+              copy: "Manage products, licenses and private releases.",
+            },
+            {
+              href: "/docs#customer-accounts",
+              title: "Explore customer accounts",
+              copy: "See how buyers manage keys, downloads and installations.",
+            },
+            {
+              href: "/docs#getting-started",
+              title: "Read the setup guide",
+              copy: "Connect your first product and publish an update.",
+            },
+          ].map(({ href, title, copy }) =>
+            h("li", [
+              h("a", { href }, [
+                h("div", [h("h3", title), h("p", copy)]),
+                publicIcon(icons.arrow),
+              ]),
+            ]),
+          ),
+        ),
+      ]),
+      h("img", {
+        class: "home-resource-art",
+        src: "/social/docs.png",
+        alt: "",
+        width: 1200,
+        height: 630,
+        loading: "lazy",
+        decoding: "async",
+      }),
+    ],
+  ),
+  h(
+    "section",
+    {
       id: "hosting",
       class: "home-section",
       "aria-labelledby": "hosting-title",
@@ -913,9 +965,24 @@ export function mountSellerApp(
           try {
             const [data, priceData, keyData] = await Promise.all([
               api.get<Overview>("/overview"),
-              api.get<{ prices: Price[]; localMode: boolean }>("/prices"),
+              api
+                .get<{ prices: Price[]; localMode: boolean }>("/prices")
+                .then((data) => ({ ...data, warning: "" }))
+                .catch((failure: unknown) => {
+                  if (
+                    failure instanceof ApiError &&
+                    [401, 403].includes(failure.status)
+                  )
+                    throw failure;
+                  return {
+                    prices: [],
+                    localMode: false,
+                    warning: errorMessage(failure),
+                  };
+                }),
               api.get<{ keys: Key[] }>("/keys"),
             ]);
+            if (priceData.warning) error.value = priceData.warning;
             overview.value = data;
             prices.value = priceData.prices;
             localMode.value = priceData.localMode;
@@ -1076,7 +1143,16 @@ export function mountSellerApp(
             },
             [
               ...children,
-              h("button", { type: "submit", disabled: busy.value }, label),
+              h(
+                "button",
+                {
+                  type: "submit",
+                  disabled:
+                    busy.value ||
+                    (id === "product-create" && !prices.value.length),
+                },
+                label,
+              ),
             ] as Parameters<typeof h>[2],
           );
           return ["product-create", "release-upload", "key-create"].includes(id)

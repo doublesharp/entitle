@@ -50,12 +50,20 @@ export async function buyerRoutes(
     const products = await db("products")
       .where({ tenant_id: tenant.id })
       .select("id", "name", "slug", "framework", "framework_config");
+    const plans = Map.groupBy(
+      await db("plans")
+        .where({ tenant_id: tenant.id })
+        .select("id", "product_id", "name", "site_allowance"),
+      (plan) => plan.product_id,
+    );
     for (const p of products) {
       p.frameworkConfig = JSON.parse(p.framework_config);
       delete p.framework_config;
-      p.plans = await db("plans")
-        .where({ tenant_id: tenant.id, product_id: p.id })
-        .select("id", "name", "site_allowance");
+      p.plans = (plans.get(p.id) ?? []).map(({ id, name, site_allowance }) => ({
+        id,
+        name,
+        site_allowance,
+      }));
     }
     return { tenant: { slug: tenant.slug, name: tenant.name }, products };
   });
@@ -262,45 +270,85 @@ export async function buyerRoutes(
   api.get("/me", async (req) => {
     const { db, auth, tenant, licensing } = context(req);
     const { customer, csrfToken } = await auth.customer(req, false);
+    const ownedLicenses = () =>
+      db<License>("licenses").where({
+        tenant_id: tenant.id,
+        customer_id: customer.id,
+      });
+    const rows = await ownedLicenses();
+    if (!rows.length)
+      return {
+        customer: { id: customer.id, email: customer.email },
+        csrfToken,
+        licenses: [],
+      };
     const licenses = [];
-    for (const row of await db<License>("licenses").where({
-      tenant_id: tenant.id,
-      customer_id: customer.id,
-    })) {
-      const l = await licensing.effective(row);
-      const product = await db("products")
-        .where({ tenant_id: tenant.id, id: l.product_id })
-        .first();
-      const plan = await db("plans")
-        .where({ tenant_id: tenant.id, id: l.plan_id })
-        .first();
-      const installations = await db<Installation>("installations")
-        .where({ tenant_id: tenant.id, license_id: l.id })
+    const effectiveRows: License[] = [];
+    for (const row of rows) effectiveRows.push(await licensing.effective(row));
+    // Read metadata after projection so concurrently added paid plans are present.
+    // Subqueries keep parameter counts bounded even for accounts with many licenses.
+    const products = new Map(
+      (
+        await db("products")
+          .where({ tenant_id: tenant.id })
+          .whereIn("id", ownedLicenses().select("product_id"))
+      ).map((product) => [product.id, product]),
+    );
+    const plans = new Map(
+      (
+        await db("plans")
+          .where({ tenant_id: tenant.id })
+          .whereIn("product_id", ownedLicenses().select("product_id"))
+      ).map((plan) => [plan.id, plan]),
+    );
+    const installations = Map.groupBy(
+      await db<Installation>("installations")
+        .where({ tenant_id: tenant.id })
+        .whereIn("license_id", ownedLicenses().select("id"))
         .select(
+          "license_id",
           "id",
           "installation_id",
           "site_url",
           "label",
           "active",
           "exempt",
-        );
-      const availableReleases = await db("releases")
-        .where({ tenant_id: tenant.id, product_id: l.product_id, withdrawn: 0 })
-        .andWhere("published_at", "<=", Date.now())
-        .select(
-          "id",
-          "version",
-          "changelog",
-          "checksum",
-          "min_wp",
-          "min_php",
-          "min_free",
-        );
-      for (const release of availableReleases)
-        release.assets = await db("release_assets").where({
-          tenant_id: tenant.id,
-          release_id: release.id,
-        });
+        ),
+      (installation) => installation.license_id,
+    );
+    const now = Date.now();
+    const visibleReleases = () =>
+      db("releases")
+        .where({ tenant_id: tenant.id, withdrawn: 0 })
+        .whereIn("product_id", ownedLicenses().select("product_id"))
+        .andWhere("published_at", "<=", now);
+    const availableReleases = await visibleReleases().select(
+      "id",
+      "product_id",
+      "version",
+      "changelog",
+      "checksum",
+      "min_wp",
+      "min_php",
+      "min_free",
+    );
+    const assets = Map.groupBy(
+      await db("release_assets")
+        .where({ tenant_id: tenant.id })
+        .whereIn("release_id", visibleReleases().select("id")),
+      (asset) => asset.release_id,
+    );
+    const releasesByProduct = Map.groupBy(
+      availableReleases,
+      (release) => release.product_id,
+    );
+    for (const release of availableReleases) {
+      release.assets = assets.get(release.id) ?? [];
+      delete release.product_id;
+    }
+    for (const l of effectiveRows) {
+      const product = products.get(l.product_id)!;
+      const plan = plans.get(l.plan_id)!;
       licenses.push({
         id: l.id,
         product_id: l.product_id,
@@ -314,12 +362,15 @@ export async function buyerRoutes(
         revoked: !!l.revoked || !!l.refund_revoked,
         suspended: !!l.suspended,
         entitled: licensing.entitled(l),
-        installations: installations.map((i) => ({
-          ...i,
+        installations: (installations.get(l.id) ?? []).map((i) => ({
+          id: i.id,
+          installation_id: i.installation_id,
+          site_url: i.site_url,
+          label: i.label,
           active: !!i.active,
           exempt: !!i.exempt,
         })),
-        releases: availableReleases,
+        releases: releasesByProduct.get(l.product_id) ?? [],
       });
     }
     return {

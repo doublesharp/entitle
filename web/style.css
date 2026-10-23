@@ -2098,6 +2098,66 @@ td button {
   font-size: 0.78rem;
   margin-top: 22px;
 }
+.home-page .home-resources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 48px;
+}
+.home-page .home-resource-links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid #d8e2cf;
+}
+.home-page .home-resource-links a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid #d8e2cf;
+  color: #173b2e;
+  text-decoration: none;
+}
+.home-page .home-resource-links a:hover h3 {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.home-page .home-resource-links a:focus-visible {
+  outline: 3px solid #205843;
+  outline-offset: 4px;
+}
+.home-page .home-resource-links h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.home-page .home-resource-links svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.home-page .home-resource-links p {
+  margin: 0;
+  color: #5b6c60;
+  font-size: 0.85rem;
+}
+.home-page .home-resource-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 600px;
+  justify-self: center;
+  aspect-ratio: 1200 / 630;
+  border-radius: 16px;
+}
+@media (max-width: 800px) {
+  .home-page .home-resources {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+}
 .home-page .home-cta {
   display: flex;
   align-items: center;

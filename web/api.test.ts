@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ApiClient, ApiError, takeLoginToken } from "./api.ts";
 
+test("request headers preserve Headers instances and tuple inputs", async () => {
+  const inputs: HeadersInit[] = [
+    new Headers({ "X-CSRF-Token": "verified", Accept: "application/zip" }),
+    [
+      ["X-CSRF-Token", "verified"],
+      ["Accept", "application/zip"],
+    ],
+    { "X-CSRF-Token": "verified", accept: "application/zip" },
+  ];
+  for (const headers of inputs) {
+    let sent: Headers | undefined;
+    const client = new ApiClient(async (_input, init) => {
+      sent = new Headers(init?.headers);
+      return Response.json({ ok: true });
+    });
+    await client.request("/protected", { method: "POST", headers });
+    assert.equal(sent?.get("X-CSRF-Token"), "verified");
+    assert.equal(sent?.get("Accept"), "application/zip");
+  }
+});
+
 test("authenticated mutations send the session CSRF token in a same-origin request", async () => {
   let request: RequestInit | undefined;
   let url: string | undefined;

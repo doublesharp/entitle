@@ -25,13 +25,15 @@ export class ApiClient {
     options: RequestInit = {},
     responseType: "json" | "blob" = "json",
   ): Promise<T> {
+    const headers = new Headers(options.headers);
+    if (!headers.has("Accept")) headers.set("Accept", "application/json");
     let response: Response;
     try {
       response = await this.transport(`${this.basePath}${path}`, {
         ...options,
         credentials: "same-origin",
         mode: "same-origin",
-        headers: { Accept: "application/json", ...options.headers },
+        headers,
       });
     } catch {
       throw new ApiError("Check your connection and try again.");

@@ -143,12 +143,13 @@ export async function sellerRoutes(
   app.get("/overview", async (req) => {
     const { db, tenant, config } = context(req);
     const products = await db("products").where({ tenant_id: tenant.id });
+    const plans = Map.groupBy(
+      await db("plans").where({ tenant_id: tenant.id }),
+      (plan) => plan.product_id,
+    );
     for (const p of products) {
       p.frameworkConfig = JSON.parse(p.framework_config);
-      p.plans = await db("plans").where({
-        tenant_id: tenant.id,
-        product_id: p.id,
-      });
+      p.plans = plans.get(p.id) ?? [];
     }
     const licenses = await db("licenses")
       .join("customers", "customers.id", "licenses.customer_id")
@@ -174,11 +175,12 @@ export async function sellerRoutes(
     const availableReleases = await db("releases")
       .where({ tenant_id: tenant.id })
       .select("id", "product_id", "version", "withdrawn");
+    const assets = Map.groupBy(
+      await db("release_assets").where({ tenant_id: tenant.id }),
+      (asset) => asset.release_id,
+    );
     for (const release of availableReleases)
-      release.assets = await db("release_assets").where({
-        tenant_id: tenant.id,
-        release_id: release.id,
-      });
+      release.assets = assets.get(release.id) ?? [];
     return {
       tenant,
       products,
