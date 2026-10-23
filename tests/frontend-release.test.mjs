@@ -1447,3 +1447,25 @@ test("prune refuses an occupied publication lock promptly and leaves it intact",
     process.pid,
   );
 });
+
+test("activation under a group-writable host umask produces a prune-safe tree", async (t) => {
+  const f = await fixture(t);
+  const release = f.pack();
+  const result = spawnSync(process.execPath, [
+    "--input-type=module", "--eval",
+    `process.umask(0o002); await import(${JSON.stringify(tool)});`,
+    tool, "activate", "--archive", release.archive, "--sha256", release.sha256,
+    "--root", f.root,
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  async function checkDirectories(dir) {
+    const info = await fs.lstat(dir);
+    assert.equal(info.mode & 0o022, 0, dir);
+    for (const entry of await fs.readdir(dir, { withFileTypes: true }))
+      if (entry.isDirectory()) await checkDirectories(path.join(dir, entry.name));
+  }
+  await checkDirectories(f.root);
+  const plan = ok("prune", "--root", f.root, "--keep", "20", "--minimum-age-days", "30", "--apply", "false", "--protect-release", release.releaseId);
+  assert.deepEqual(plan.deleteReleases, []);
+  assert.equal(plan.currentRelease, release.releaseId);
+});

@@ -311,7 +311,7 @@ async function pack(input, output, sourceSha) {
 }
 
 async function directory(name) {
-  await fs.mkdir(name).catch((error) => {
+  await fs.mkdir(name, { mode: 0o755 }).catch((error) => {
     if (error.code !== "EEXIST") throw error;
   });
   const info = await fs.lstat(name);
@@ -326,13 +326,13 @@ async function parents(base, relative) {
   }
 }
 async function withLock(root, operation, wait = true) {
-  await fs.mkdir(root, { recursive: true });
+  await fs.mkdir(root, { recursive: true, mode: 0o755 });
   await directory(root);
   const lock = path.join(root, ".frontend-release.lock");
   const deadline = Date.now() + 60000;
   while (true) {
     try {
-      await fs.mkdir(lock);
+      await fs.mkdir(lock, { mode: 0o700 });
       break;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
@@ -453,7 +453,7 @@ async function activate(archive, sha256, root) {
     if (await exists(target)) await checkRelease(target, manifest.releaseId);
     else {
       const stage = path.join(releases, `.stage-${randomUUID()}`);
-      await fs.mkdir(stage);
+      await fs.mkdir(stage, { mode: 0o755 });
       try {
         await fs.writeFile(
           path.join(stage, MANIFEST),
