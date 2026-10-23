@@ -1233,8 +1233,21 @@ export async function buildApp(
       index: "index.html",
       wildcard: true,
     });
-    for (const route of ["/seller", "/t/:tenant", "/docs", "/docs/"])
-      app.get(route, (_req, reply) => reply.sendFile("index.html"));
+    for (const [route, file] of [
+      ["/seller", "seller.html"],
+      ["/seller/", "seller.html"],
+      ["/t/:tenant", "customer.html"],
+      ["/t/:tenant/", "customer.html"],
+      ["/docs", "docs.html"],
+      ["/docs/", "docs.html"],
+    ] as const) {
+      // The API may also serve a frontend release from before page-specific shells.
+      const shell = await stat(join(config.staticDir, file)).then(
+        () => file,
+        () => "index.html",
+      );
+      app.get(route, (_req, reply) => reply.sendFile(shell));
+    }
   }
   app.setNotFoundHandler((req, reply) =>
     reply.code(404).send({

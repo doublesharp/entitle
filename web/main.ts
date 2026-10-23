@@ -1261,7 +1261,7 @@ export function mountSiteApp(
   target: string | Element = "#app",
   transport?: typeof fetch,
 ) {
-  if (window.location.pathname === "/seller")
+  if (/^\/seller\/?$/.test(window.location.pathname))
     return mountSellerApp(target, transport);
   if (window.location.pathname.startsWith("/t/"))
     return mountCustomerApp(target, transport);
