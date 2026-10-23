@@ -159,29 +159,8 @@ export async function lock(tx: Tx, name: string, tenantId?: string) {
   const count = await tx("locks").where({ id }).increment("version", 1);
   if (count !== 1) throw Error(`missing lock ${id}`);
 }
-export interface Tenant {
-  id: string;
-  slug: string;
-  name: string;
-  stripe_account_id: string | null;
-  stripe_status: string;
-  platform_customer_id: string | null;
-  platform_subscription_id: string | null;
-  billing_status: string;
-  paid_through: number;
-  trial_ends_at: number;
-  exempt: number;
-  suspended: number;
-  max_products: number;
-  max_storage_bytes: number;
-  created_at: number;
-  pro_paid_through?: number;
-  pro_period_start?: number;
-  platform_billing_revision?: number;
-  automatic_tax?: number;
-  collect_tax_id?: number;
-  collect_billing_address?: number;
-}
+export type { Tenant } from "../packages/shared/tenant.ts";
+import type { Tenant } from "../packages/shared/tenant.ts";
 export type TenantContext = Pick<Tenant, "id" | "slug" | "name">;
 function tenantLocks(id: string) {
   return ["auth", "billing", "email", "schema", "work"].map((name) => ({

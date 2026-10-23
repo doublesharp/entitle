@@ -1,0 +1,35 @@
+name: Notify private deployment
+
+on:
+  workflow_run:
+    workflows: [Entitle CI]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'success' && vars.DISPATCH_APP_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        id: token
+        with:
+          app-id: ${{ vars.DISPATCH_APP_ID }}
+          private-key: ${{ secrets.DISPATCH_APP_PRIVATE_KEY }}
+          owner: doublesharp
+          repositories: entitle-deploy
+          permission-actions: write
+      - name: Notify the private promotion workflow
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh api --method POST repos/doublesharp/entitle-deploy/actions/workflows/release.yml/dispatches \
+            -f ref=main \
+            -f "inputs[source_sha]=$SOURCE_SHA" \
+            -f "inputs[run_id]=$RUN_ID"

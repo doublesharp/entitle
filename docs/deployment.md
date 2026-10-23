@@ -1,6 +1,6 @@
 # Deployment
 
-Run one application container behind HTTPS. The same process serves the API, Vue assets and database-backed jobs. SQLite needs persistent local storage; PostgreSQL/MySQL are alternatives. Artifacts live in a private S3-compatible bucket. No Redis or separate application service is required. Use the [configuration reference](configuration.md) for environment defaults and validation, [CLI reference](cli.md) for automation, and [troubleshooting](troubleshooting.md) for failed setup or delivery.
+Run the server and a static web runtime behind HTTPS. The server runs the API and database-backed jobs. The web runtime serves independently published Vue assets and forwards API requests on the same origin. SQLite needs persistent local storage; PostgreSQL/MySQL are alternatives. Artifacts live in a private S3-compatible bucket. Redis is an optional cache. Use the [configuration reference](configuration.md) for environment defaults and validation, [CLI reference](cli.md) for automation, and [troubleshooting](troubleshooting.md) for failed setup or delivery.
 
 ## Using the hosted service
 
@@ -100,7 +100,7 @@ by those terms. Enabling hosted mode does not grant additional license rights.
 
 Set `PUBLIC_ORIGIN` to your actual HTTPS service origin. Use your own domain for standalone; `https://entitle.doublesharp.com` is the planned hosted deployment. This is the common runtime origin for the application, HTTPS proxy, emailed links, Stripe callbacks and package URLs. There is no separate proxy hostname setting. Public brand text and the planned hosted link are shared in [../src/site.ts](../src/site.ts). Keep local development at `http://localhost:3211`. Recording this hostname does not provision DNS, certificates or a production deployment.
 
-Create a private persistent directory owned by UID/GID 1000, copy `.env.example` to `.env`, and protect it with mode 0600. Set `ENTITLE_DATA_DIR`, `PUBLIC_ORIGIN`, `NODE_ENV=production`, `LOCAL_BILLING=false`, `DATA_DIR=/data`, `WORK_DIR=/data/work` and `WEB_DIR=/app/dist/web`. The Compose proxy uses a fixed subnet; ensure it is unused and trust only its exact IP using `TRUST_PROXY=172.30.81.2`. Production requires an explicit deliverable `MAIL_FROM` and matching Stripe secret/publishable key modes. SMTP requires TLS in production, including STARTTLS when `SMTP_SECURE=false`.
+Create a private persistent directory owned by UID/GID 1000, copy `.env.example` to `.env`, and protect it with mode 0600. Set `ENTITLE_DATA_DIR`, `PUBLIC_ORIGIN`, `NODE_ENV=production`, `LOCAL_BILLING=false`, `DATA_DIR=/data`, `WORK_DIR=/data/work` and `WEB_DIR=/app/web`. Set `ENTITLE_PUBLIC_HOST` to the hostname in `PUBLIC_ORIGIN` and `ENTITLE_WEB_RELEASE_DIR` to the absolute frontend publication directory. The Compose network uses a fixed subnet; ensure it is unused. The API trusts only the web runtime at `TRUST_PROXY=172.30.81.4`; the web runtime trusts Caddy at `172.30.81.2/32` for client IPs. Production requires an explicit deliverable `MAIL_FROM` and matching Stripe secret/publishable key modes. SMTP requires TLS in production, including STARTTLS when `SMTP_SECURE=false`.
 
 Generate independent `APP_SECRET` (64 hex) and `OPERATOR_TOKEN` (at least 32 random characters). Back up APP_SECRET permanently: outbox credentials and activation retry material depend on it. Supply SMTP host/port/user/password/from; port 587 uses STARTTLS, port 465 normally needs SMTP_SECURE=true. Mailpit is development-only.
 
@@ -108,10 +108,39 @@ Configure `S3_BUCKET`, `S3_REGION`, optional `S3_ENDPOINT`, and credentials thro
 
 Shared defaults: MAX_UPLOAD_MIB=25 (hard 100), TRANSFER_MEMORY_MIB=256 and DAILY_EMAIL_LIMIT=1000. Hosted quota settings default to TRIAL_DAYS=14, GRACE_DAYS=7, MAX_TENANTS_PER_SELLER=3, TRIAL_STORAGE_MIB=100, PAID_MAX_PRODUCTS=20 and PAID_STORAGE_MIB=1024. Hosted trial or paid subscription periods do not apply to the exempt standalone workspace. Transfer memory must cover at least six times the upload cap. That budget covers transfer buffers only; reserve additional process memory for Node, database and request overhead. Increasing the ZIP cap requires a larger host/container budget. Archive security limits remain 2,000 entries, 250 MiB expanded and bounded compression ratio. Native packages use a separate 100 MiB default cap with a 2 GiB hard ceiling and bounded private disk spools. Their expanded archive limit is the greater of 250 MiB or package size. See [native transfer budgets](#native-artifact-disk-and-transfer-budgets) and [framework support](platform-support.md) before raising limits.
 
+Build and activate a frontend artifact before starting the web runtime. Use an
+absolute writable release directory owned by the publishing account. The runtime
+mounts its parent read-only, so activation can change `current` without restarting
+the container. For a local build, keep output on Scratch:
+
 ```sh
+BUILD_DIR=/Volumes/Scratch/entitle/build/self-host pnpm build:web
+node scripts/deployment/frontend-release.mjs pack \
+  --input /Volumes/Scratch/entitle/build/self-host/web \
+  --output /Volumes/Scratch/entitle/build/self-host/frontend.tar \
+  --source-sha "$(git rev-parse HEAD)"
+# Use the sha256 from pack's JSON result and the ENTITLE_WEB_RELEASE_DIR path.
+node scripts/deployment/frontend-release.mjs activate \
+  --archive /Volumes/Scratch/entitle/build/self-host/frontend.tar \
+  --sha256 ARCHIVE_SHA256 --root /srv/entitle/frontend
 docker compose --env-file .env -f deploy/compose.yaml build
 docker compose --env-file .env -f deploy/compose.yaml up -d
 ```
+
+`pnpm build:server` and `pnpm build:web` have separate dependency closures under
+`apps/server` and `apps/web`. Source stays in `src/` and `web/` to preserve existing
+integration imports. `packages/shared` contains browser-safe shared definitions.
+The server image contains no frontend assets, test code or browser dependencies.
+`pnpm build` still produces both targets for local development.
+
+Public CI checks and builds source without production credentials. It reuses
+server and web-runtime images by hashes of their build inputs and publishes
+frontend archives with checksums. Production configuration and promotion live in
+a separate private repository. A frontend-only publication replaces files under
+the stable runtime and does not restart either service. Failed promotion must
+reconcile the observed container image and health, rather than assuming a saved
+image setting was deployed. Database migrations require their own backup and
+compatibility checks before promotion.
 
 The root filesystem is read-only; only `/data` is writable. Only the proxy publishes ports. Readiness checks a database query, private S3 bucket access and working-directory read/write. Liveness is `/api/v1/health`. Observe readiness, memory, database/backlog sizes, oldest job age, failed jobs, object reservations and bucket cost. HTTP logs contain route templates and generic errors, never request URLs, bearer values or client secrets.
 

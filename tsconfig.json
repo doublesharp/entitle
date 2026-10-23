@@ -29,7 +29,8 @@
     "src/**/*.ts",
     "tests/**/*.ts",
     "web/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "packages/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,8 +1,1 @@
-// Public branding only. Authentication, API and checkout URLs use PUBLIC_ORIGIN.
-const name = "Doublesharp Entitle";
-export const site = Object.freeze({
-  name,
-  hostedOrigin: "https://entitle.doublesharp.com",
-  tagline: "Software licensing and updates",
-  description: `Software licensing, subscriptions and private updates for independent developers. Connect your own Stripe account with ${name}.`,
-});
+export { site } from "../packages/shared/site.ts";

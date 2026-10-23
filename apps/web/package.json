@@ -1,0 +1,26 @@
+{
+  "name": "@entitle/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "cd ../.. && node scripts/build-web.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "cd ../.. && apps/web/node_modules/.bin/eslint --config apps/web/eslint.config.js web packages/shared",
+    "test": "node --test --test-concurrency=1 ../../web/*.test.ts"
+  },
+  "dependencies": {
+    "vue": "3.5.44",
+    "@stripe/stripe-js": "10.1.0",
+    "@entitle/shared": "workspace:*",
+    "vite": "8.3.4",
+    "@types/node": "26.6.5",
+    "typescript": "7.0.2",
+    "eslint": "10.13.0",
+    "@eslint/js": "10.0.1",
+    "@babel/core": "8.0.7",
+    "@babel/eslint-parser": "8.0.7",
+    "@babel/plugin-syntax-typescript": "8.0.3"
+  },
+  "devDependencies": {}
+}

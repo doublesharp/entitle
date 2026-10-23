@@ -14,8 +14,8 @@ import {
   setupConfiguration,
 } from "./frameworks.ts";
 import type { Framework, FrameworkProduct, ReleaseAsset } from "./api.ts";
-import type { Tenant } from "../src/db.ts";
-import { site } from "../src/site.ts";
+import type { Tenant } from "../packages/shared/tenant.ts";
+import { site } from "../packages/shared/site.ts";
 import { SellerFeaturePanel, verifiedRequest } from "./features.ts";
 import { publicDocs } from "./docs.ts";
 

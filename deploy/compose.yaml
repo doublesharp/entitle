@@ -10,7 +10,7 @@ services:
       LOCAL_BILLING: "false"
       DATA_DIR: /data
       WORK_DIR: /data/work
-      WEB_DIR: /app/dist/web
+      WEB_DIR: /app/web
       PORT: 3211
     volumes:
       - ${ENTITLE_DATA_DIR:?Set ENTITLE_DATA_DIR to an absolute persistent directory}:/data
@@ -22,6 +22,29 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: ${ENTITLE_MEMORY_LIMIT:-768m}
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/runtime.Dockerfile
+    restart: unless-stopped
+    environment:
+      ENTITLE_API_UPSTREAM: app:3211
+      ENTITLE_PUBLIC_HOST: ${ENTITLE_PUBLIC_HOST:?Set the hostname matching PUBLIC_ORIGIN}
+      ENTITLE_PUBLIC_SCHEME: https
+      ENTITLE_TRUSTED_PROXY_CIDRS: 172.30.81.2/32
+    volumes:
+      - ${ENTITLE_WEB_RELEASE_DIR:?Set an absolute activated frontend release directory}:/releases:ro
+    tmpfs:
+      - /runtime:uid=101,gid=101,mode=0700
+      - /cache:uid=101,gid=101,mode=0700
+    expose: ["8080"]
+    networks:
+      default:
+        ipv4_address: 172.30.81.4
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
   proxy:
     image: caddy:2.11.2
     restart: unless-stopped

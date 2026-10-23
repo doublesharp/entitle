@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { join, dirname, resolve, basename } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 /** Maintainer check only. Packaging still reads the explicit manifest. */
 export async function sourceFiles(root: string): Promise<string[]> {
@@ -27,7 +28,7 @@ export async function sourceFiles(root: string): Promise<string[]> {
       else if (entry.isFile() && !/\.(pem|key|p12|env)$/i.test(entry.name)) files.push(relative);
     }
   };
-  for (const directory of ["src", "web", "tests", "scripts", "docs", "examples", "deploy"]) await walk(directory);
+  for (const directory of ["src", "web", "apps", "packages", "tests", "scripts", "docs", "examples", "deploy"]) await walk(directory);
   return [...roots, ...files].sort();
 }
 
@@ -59,7 +60,7 @@ export async function packageSource(root: string, webOutput: string) {
   for (const path of paths) {
     if (
       (!roots.has(path) &&
-        !/^(src|web|tests|scripts|docs|examples|deploy)\/[a-zA-Z0-9_./-]+$/.test(
+        !/^(src|web|apps|packages|tests|scripts|docs|examples|deploy)\/[a-zA-Z0-9_./-]+$/.test(
           path,
         )) ||
       path
@@ -140,7 +141,7 @@ export async function browserNotices(moduleIds: string[], root: string) {
   const packages = new Set<string>();
   for (const id of [
     ...moduleIds,
-    join(root, "node_modules/vite/dist/node/index.js"),
+    createRequire(join(root, "apps/web/package.json")).resolve("vite"),
   ]) {
     if (!id.includes("node_modules/") || id.includes("\0")) continue;
     let directory = dirname(resolve(id));
