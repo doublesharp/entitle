@@ -38,20 +38,28 @@ jobs:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
           server_hash=$(git ls-files -z -- Dockerfile .dockerignore package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .node-version apps/server packages/shared src scripts/build-server.ts LICENSE ADDITIONAL-PERMISSION.md NOTICE | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)
-          runtime_hash=$(git ls-files -z -- deploy/runtime.Dockerfile deploy/runtime-entrypoint.sh deploy/nginx.conf.template .dockerignore | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)
+          runtime_hash=$(git ls-files -z -- deploy/runtime.Dockerfile deploy/runtime-entrypoint.sh deploy/api-router-entrypoint.sh deploy/nginx.conf.template .dockerignore | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)
           server=true
           runtime=true
-          if docker manifest inspect "ghcr.io/doublesharp/entitle-server:input-$server_hash" >/dev/null 2>&1; then server=false; fi
-          if docker manifest inspect "ghcr.io/doublesharp/entitle-web-runtime:input-$runtime_hash" >/dev/null 2>&1; then runtime=false; fi
+          # PRs qualify from source without registry access, including fork PRs.
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+            if docker manifest inspect "ghcr.io/doublesharp/entitle-server:input-$server_hash" >/dev/null 2>&1; then server=false; fi
+            if docker manifest inspect "ghcr.io/doublesharp/entitle-web-runtime:input-$runtime_hash" >/dev/null 2>&1; then runtime=false; fi
+          fi
           if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
             server=true
             runtime=true
           else
             while IFS= read -r file; do
               case "$file" in
-                tests/*.test.ts|.github/workflows/*) server=true ;;
+                # Image hashes describe build inputs. Qualification also depends on
+                # tests and tooling, even when the image itself is reusable.
+                tests/*|web/*|scripts/*|.github/*|.node-version|*package.json|pnpm-*.yaml|*tsconfig*|*eslint*|*prettier*|.npmrc|.pnpmfile.*)
+                  server=true
+                  runtime=true
+                  ;;
               esac
             done < <(git diff --name-only "$BASE_SHA" HEAD)
           fi
@@ -78,8 +86,36 @@ jobs:
       - run: |
           npm install --global pnpm@12.14.0
           pnpm install --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
-      - run: pnpm typecheck && pnpm lint && pnpm test
-      - run: pnpm build:server
+      - run: pnpm typecheck && pnpm lint
+      # Trusted builds compile in Docker. PRs still qualify compilation locally.
+      - if: github.event_name == 'pull_request'
+        run: pnpm build:server
+
+  server-tests:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash scripts/deployment/setup-ci.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+        with:
+          path: /Volumes/Scratch/entitle/cache/pnpm
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+      - run: |
+          npm install --global pnpm@12.14.0
+          pnpm install --frozen-lockfile --store-dir /Volumes/Scratch/entitle/cache/pnpm
+      - run: node --test --test-shard=${{ matrix.shard }}/3 --test-concurrency=1 tests/*.test.ts tests/*.test.mjs web/*.test.ts
 
   frontend:
     needs: changes
@@ -110,7 +146,12 @@ jobs:
       - run: pnpm build:hosted-web
       - run: node --test tests/frontend-release.test.mjs
         env:
-          FRONTEND_BUILD_CHECK: '1'
+          FRONTEND_BUILD_CHECK: "1"
+      - name: Qualify API router runtime
+        if: env.FRONTEND_RUNTIME_SMOKE == '1'
+        run: node --test tests/api-router.test.mjs
+        env:
+          API_ROUTER_SMOKE: "1"
       - name: Pack immutable frontend
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -148,9 +189,11 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-  server-image:
-    needs: [changes, server-checks]
-    if: always() && github.event_name != 'pull_request' && needs.changes.result == 'success' && (needs.server-checks.result == 'success' || needs.server-checks.result == 'skipped')
+  server-build:
+    needs: changes
+    if: github.event_name != 'pull_request'
+    outputs:
+      digest: ${{ steps.cached.outputs.digest || steps.image.outputs.digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -174,6 +217,9 @@ jobs:
           if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
           fi
+      # If an already-qualified cache disappears, fail rather than build with skipped checks.
+      - if: needs.changes.outputs.server == 'false' && steps.cached.outputs.digest == ''
+        run: exit 1
       - id: image
         if: steps.cached.outputs.digest == ''
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
@@ -181,25 +227,60 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/doublesharp/entitle-server:source-${{ github.sha }}
-            ghcr.io/doublesharp/entitle-server:input-${{ needs.changes.outputs.server_hash }}
+          # Candidates confer no release or reusable qualification.
+          tags: ghcr.io/doublesharp/entitle-server:build-${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha,scope=entitle-server
           cache-to: type=gha,scope=entitle-server,mode=max
           labels: |
             org.opencontainers.image.source=https://github.com/doublesharp/entitle
             org.opencontainers.image.revision=${{ github.sha }}
-      - env:
-          DIGEST: ${{ steps.cached.outputs.digest || steps.image.outputs.digest }}
-        run: printf '%s\n' "$DIGEST" > server-digest.txt
+
+  server-image:
+    needs: [changes, server-build, server-checks, server-tests]
+    if: >-
+      always() && github.event_name != 'pull_request' &&
+      needs.changes.result == 'success' && needs.server-build.result == 'success' &&
+      (needs.server-checks.result == 'success' || (needs.changes.outputs.server == 'false' && needs.server-checks.result == 'skipped')) &&
+      (needs.server-tests.result == 'success' || (needs.changes.outputs.server == 'false' && needs.server-tests.result == 'skipped'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish qualified tags
+        env:
+          IMAGE: ghcr.io/doublesharp/entitle-server
+          DIGEST: ${{ needs.server-build.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+          INPUT_HASH: ${{ needs.changes.outputs.server_hash }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          # Preserve the manifest, including single-manifest images, without wrapping it.
+          docker buildx imagetools create --prefer-index=false \
+            --tag "$IMAGE:source-$SOURCE_SHA" --tag "$IMAGE:input-$INPUT_HASH" "$IMAGE@$DIGEST"
+          for tag in "source-$SOURCE_SHA" "input-$INPUT_HASH"; do
+            published=$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{.Manifest.Digest}}')
+            [[ "$published" == "$DIGEST" ]]
+          done
+          printf '%s\n' "$DIGEST" > server-digest.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: server-image-${{ github.sha }}
           path: server-digest.txt
           retention-days: 7
+          if-no-files-found: error
 
   web-runtime:
-    needs: changes
+    # Reusable runtime tags must also follow the runtime smoke checks.
+    needs: [changes, frontend]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -252,7 +333,16 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    needs: [changes, server-checks, frontend, server-image, web-runtime]
+    needs:
+      [
+        changes,
+        server-checks,
+        server-tests,
+        frontend,
+        server-build,
+        server-image,
+        web-runtime,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
