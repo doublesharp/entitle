@@ -315,7 +315,11 @@ test("public marketing home explains the workflow and links signup and docs with
   );
   assert.ok(dom.document.querySelector('nav a[href="/docs"]'));
   assert.ok(dom.document.querySelector('a[href="#how-it-works"]'));
-  assert.match(el("figure figcaption").textContent, /Illustrative workflow/);
+  assert.equal(dom.document.querySelector("figure figcaption"), null);
+  assert.equal(
+    el("figure").getAttribute("aria-label"),
+    "From purchase to update",
+  );
   assert.equal(dom.document.querySelector("#server-limits"), null);
   assert.equal(calls.length, 0);
 });
