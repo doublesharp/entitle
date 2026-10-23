@@ -91,6 +91,7 @@ scripts/build.ts
 scripts/coverage-gate.ts
 scripts/coverage-reporter.mjs
 scripts/coverage.ts
+scripts/deployment/check-ci-results.mjs
 scripts/deployment/frontend-release.mjs
 scripts/deployment/setup-ci.sh
 scripts/distribution.ts
@@ -180,6 +181,7 @@ tests/business-events.test.ts
 tests/checkout-cookie.test.ts
 tests/checkout-schema.test.ts
 tests/checkout.test.ts
+tests/ci-results.test.mjs
 tests/cli-coverage.test.ts
 tests/cli.test.ts
 tests/commerce-admin.test.ts

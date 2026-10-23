@@ -223,3 +223,22 @@ jobs:
           name: web-runtime-${{ github.sha }}
           path: runtime-digest.txt
           retention-days: 7
+
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [changes, server-checks, frontend, server-image, web-runtime]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Require all applicable CI jobs to succeed
+        env:
+          CI_RESULTS: ${{ toJSON(needs) }}
+          CI_EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/deployment/check-ci-results.mjs
