@@ -15,6 +15,8 @@ a present empty string; omit optional price/account IDs until configured.
 
 | Variable                    | Default                         | Constraint / purpose                                                                                                    |
 | --------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `SERVER_ROLE`               | `all`                           | `all`, `api`, `worker` or `migrate`; see runtime roles below. Unknown values fail before opening the database.             |
+| `DEPLOYMENT_SLOT`           | Omitted                         | Optional exact `blue` or `green`; readiness identity for the deployment router.                                          |
 | `NODE_ENV`                  | Unset                           | Exact `production` enables production requirements.                                                                     |
 | `DEPLOYMENT_MODE`           | `standalone`                    | `standalone` or `hosted`; does not migrate a database.                                                                  |
 | `PUBLIC_ORIGIN`             | `http://localhost:3211`         | HTTP(S) origin only, no credentials/path/query/fragment; HTTPS in production. Also used by the Compose proxy.           |
@@ -29,6 +31,40 @@ a present empty string; omit optional price/account IDs until configured.
 Standalone startup refuses a hosted database with unrelated tenants or connected
 account/platform billing mappings. Keep hosted databases in hosted mode. Do not
 delete records to bypass the guard. An isolated sandbox child is supported.
+
+## Runtime roles
+
+`SERVER_ROLE=all` preserves legacy startup: apply bundled migrations, serve HTTP,
+and run the background tick every five seconds. Use this default for local or
+single-service deployments.
+
+`SERVER_ROLE=api` serves HTTP without the background timer. `SERVER_ROLE=worker`
+serves HTTP for internal health checks and runs the background timer. Both roles
+require the existing `knex_migrations` history to contain every bundled migration
+exactly once, with no unknown names. They check it without applying migrations
+or creating migration metadata tables. Missing or incompatible history refuses
+startup and closes the database before opening a listener. These checks compare
+migration names, not migration contents or deployment fingerprints.
+
+`SERVER_ROLE=migrate` applies migrations once and closes the database without
+building the app, opening HTTP, starting a timer or installing server signal
+handlers. Invoke the server module directly, for example
+`SERVER_ROLE=migrate node src/server.ts`, or call the exported `startRuntime()`
+dispatcher. `startServer()` retains its listening-server result for legacy
+callers and rejects `migrate` before opening a database. A successful migration
+returns `{ role: "migrate" }` from `startRuntime()`.
+
+`GET /api/v1/ready` keeps the existing response body and dependency checks. It
+adds the nonsecret `X-Entitle-Server-Role` response header, including on failed
+readiness, and `X-Entitle-Deployment-Slot` when configured. The router must check
+HTTP success, role `api` and its expected slot together. A worker's readiness
+always identifies it as `worker`; a matching slot alone does not qualify it as
+an API candidate. Slots accept only `blue` or `green`; empty values are invalid.
+
+API and worker shutdown remains idempotent, handles SIGINT and SIGTERM, and
+closes the database after HTTP and in-flight worker work finish. Keep exactly
+one worker active across slot transitions; role selection does not coordinate
+worker ownership between processes.
 
 ## Database and filesystem
 
