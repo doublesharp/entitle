@@ -90,9 +90,7 @@ test(
     });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     t.after(() => new Promise((resolve) => server.close(resolve)));
-    const root = await mkdtemp(
-      "/Volumes/Scratch/entitle/tmp/blue-green-20261023/ci-buildx-",
-    );
+    const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/ci-buildx-");
     t.after(() => rm(root, { recursive: true, force: true }));
     const workflow = await readFile(
       new URL("../.github/workflows/ci.yml", import.meta.url),

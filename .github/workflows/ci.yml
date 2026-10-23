@@ -235,6 +235,13 @@ jobs:
             org.opencontainers.image.source=https://github.com/doublesharp/entitle
             org.opencontainers.image.revision=${{ github.sha }}
 
+      - name: Qualify compiled server roles against PostgreSQL
+        run: |
+          bash scripts/deployment/setup-ci.sh
+          node --test tests/server-container.test.mjs
+        env:
+          SERVER_CONTAINER_IMAGE: ghcr.io/doublesharp/entitle-server@${{ steps.cached.outputs.digest || steps.image.outputs.digest }}
+
   server-image:
     needs: [changes, server-build, server-checks, server-tests]
     if: >-

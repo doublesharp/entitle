@@ -23,9 +23,7 @@ function script(text, anchor) {
   return run[1].replace(/^          /gm, "");
 }
 async function fixture(t) {
-  const root = await mkdtemp(
-    "/Volumes/Scratch/entitle/tmp/blue-green-20261023/ci-test-",
-  );
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/ci-test-");
   t.after(() => rm(root, { recursive: true, force: true }));
   const executable = async (name, text) => {
     await writeFile(
