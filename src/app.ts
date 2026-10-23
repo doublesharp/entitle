@@ -515,7 +515,7 @@ export async function buildApp(
       });
   };
   const tick = async () => {
-    if (ticking || closing) return;
+    if (config.serverRole === "api" || ticking || closing) return;
     ticking = true;
     tickIdle = new Promise<void>((resolve) => {
       markTickIdle = resolve;

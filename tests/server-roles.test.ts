@@ -1,6 +1,8 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { EventEmitter } from "node:events";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,6 +11,7 @@ import { InMemoryArtifactStore } from "../src/storage.ts";
 import { Releases } from "../src/releases.ts";
 import { loadConfig, type Config } from "../src/config.ts";
 import { createDb, migrate, type DB } from "../src/db.ts";
+import { seal } from "../src/crypto.ts";
 
 const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/server-roles-");
 after(() => rm(root, { recursive: true, force: true }));
@@ -160,6 +163,140 @@ test("worker ticks without migration and is identifiable as worker, including on
   assert.deepEqual(ctl.exits, [0]);
   await assert.rejects(running.db.raw("select 1"), /connection/i);
 });
+
+async function seedTickWork(db: DB, c: Config) {
+  await db("platform_emails").insert({
+    id: "role-email",
+    kind: "login",
+    payload: seal(
+      { to: "person@example.test", subject: "Role test", text: "Queued work" },
+      c.secret,
+    ),
+    created_at: Date.now(),
+  });
+  await db("customers").insert({
+    tenant_id: "primary",
+    id: "role-customer",
+    email: "person@example.test",
+  });
+  await db("sessions").insert({
+    tenant_id: "primary",
+    id: "role-session",
+    customer_id: "role-customer",
+    expires_at: 1,
+  });
+}
+
+for (const trigger of ["operator", "direct"] as const) {
+  test(`API disables ${trigger} ticks without executing seeded work`, async (t) => {
+    const c = config("api"),
+      ctl = control();
+    await prepare(c);
+    let deliveries = 0;
+    ctl.runtime.buildApp = (config, db) =>
+      server.serverRuntime.buildApp(
+        config,
+        db,
+        {
+          send: async () => {
+            deliveries++;
+          },
+        },
+        { store: new InMemoryArtifactStore() },
+      );
+    const running = await server.startServer(c, ctl.runtime);
+    t.after(() => running.stop());
+    await seedTickWork(running.db, c);
+    const before = await running.db("platform_emails").first();
+    let status: number | undefined, code: string | undefined;
+    if (trigger === "operator") {
+      const unauthorized = await running.app.inject({
+        method: "POST",
+        url: "/api/v1/operator/jobs/run",
+        payload: {},
+      });
+      assert.equal(unauthorized.statusCode, 401);
+      const response = await running.app.inject({
+        method: "POST",
+        url: "/api/v1/operator/jobs/run",
+        headers: { authorization: `Bearer ${c.operatorToken}` },
+        payload: {},
+      });
+      status = response.statusCode;
+      code = response.json().error?.code;
+    } else {
+      await (
+        running.app as typeof running.app & { tick: () => Promise<void> }
+      ).tick();
+    }
+    assert.deepEqual(
+      {
+        status,
+        code,
+        deliveries,
+        job: await running.db("platform_emails").first(),
+        sessions: (await running.db("sessions")).length,
+      },
+      {
+        status: trigger === "operator" ? 409 : undefined,
+        code: trigger === "operator" ? "jobs_disabled" : undefined,
+        deliveries: 0,
+        job: before,
+        sessions: 1,
+      },
+    );
+    assert.equal(ctl.timers, 0);
+  });
+}
+
+for (const role of ["worker", "all", undefined] as const) {
+  for (const trigger of ["operator", "direct", "timer"] as const) {
+    test(`${role ?? "omitted-role legacy"} executes seeded work through ${trigger} ticks`, async (t) => {
+      const c = config(role),
+        ctl = control();
+      // Exercise programmatic Config callers that predate serverRole.
+      if (role === undefined) delete c.serverRole;
+      await prepare(c);
+      let deliveries = 0;
+      ctl.runtime.buildApp = (config, db) =>
+        server.serverRuntime.buildApp(
+          config,
+          db,
+          {
+            send: async () => {
+              deliveries++;
+            },
+          },
+          { store: new InMemoryArtifactStore() },
+        );
+      const running = await server.startServer(c, ctl.runtime);
+      t.after(() => running.stop());
+      await seedTickWork(running.db, c);
+      if (trigger === "operator") {
+        const response = await running.app.inject({
+          method: "POST",
+          url: "/api/v1/operator/jobs/run",
+          headers: { authorization: `Bearer ${c.operatorToken}` },
+          payload: {},
+        });
+        assert.equal(response.statusCode, 200, response.body);
+        assert.deepEqual(response.json(), { ok: true });
+      } else if (trigger === "direct") {
+        await (
+          running.app as typeof running.app & { tick: () => Promise<void> }
+        ).tick();
+      } else {
+        ctl.fire();
+        for (let i = 0; i < 100 && (await running.db("sessions")).length; i++)
+          await delay(5);
+      }
+      assert.equal(deliveries, 1);
+      assert.equal((await running.db("platform_emails").first()).state, "sent");
+      assert.equal((await running.db("sessions")).length, 0);
+      assert.equal(ctl.timers, 1);
+    });
+  }
+}
 
 test("API/worker refuse missing, pending, unknown or duplicate migration history without schema writes", async (t) => {
   for (const role of ["api", "worker"]) {
@@ -392,4 +529,63 @@ test("worker shutdown drains an active core tick before destroying DB and ignore
   ).tick;
   await tick();
   assert.equal(attempts, 1);
+});
+
+test("start launcher dispatches migrate through the runtime entry", async () => {
+  const out = `${root}/launcher-build`,
+    data = `${root}/launcher-data`;
+  await mkdir(`${out}/server/src`, { recursive: true });
+  await writeFile(
+    `${out}/server/package.json`,
+    JSON.stringify({ type: "module" }),
+  );
+  // Isolate launcher dispatch while exercising the real source migration runtime.
+  await writeFile(
+    `${out}/server/src/server.js`,
+    `export { startRuntime, startServer } from ${JSON.stringify(pathToFileURL(resolve("src/server.ts")).href)};\n`,
+  );
+  const child = spawn(
+    process.execPath,
+    ["--env-file-if-exists=.env", "scripts/start.ts"],
+    {
+      env: {
+        ...process.env,
+        ...credentials,
+        NODE_ENV: "test",
+        SERVER_ROLE: "migrate",
+        DEPLOYMENT_SLOT: "blue",
+        DATABASE_URL: `sqlite:${data}/db.sqlite`,
+        DATA_DIR: data,
+        BUILD_DIR: out,
+        PORT: "0",
+        LOCAL_BILLING: "true",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
+  const watchdog = setTimeout(() => child.kill("SIGKILL"), 10000);
+  try {
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    assert.equal(code, 0, output);
+    assert.doesNotMatch(output, /listening/i);
+    const db = createDb(`sqlite:${data}/db.sqlite`);
+    try {
+      assert.equal((await db("knex_migrations")).length, 13);
+    } finally {
+      await db.destroy();
+    }
+  } finally {
+    clearTimeout(watchdog);
+    child.kill("SIGKILL");
+  }
 });

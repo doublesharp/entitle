@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 const out = resolve(
   process.env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main",
 );
-const { startServer } = await import(
+const { startRuntime } = await import(
   pathToFileURL(`${out}/server/src/server.js`).href
 );
-await startServer();
+await startRuntime();
