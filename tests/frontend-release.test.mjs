@@ -15,9 +15,13 @@ const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 test(
   "production HTML contains distinct previews and deployable PNG assets before JavaScript runs",
   {
-    skip: !process.env.BUILD_DIR,
+    skip: process.env.FRONTEND_BUILD_CHECK !== "1",
   },
   async () => {
+    assert.ok(
+      process.env.BUILD_DIR,
+      "BUILD_DIR is required to check frontend output",
+    );
     const output = path.join(process.env.BUILD_DIR, "web");
     const titles = new Set();
     for (const page of ["home", "docs", "seller", "customer"]) {
