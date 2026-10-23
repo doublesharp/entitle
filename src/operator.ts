@@ -30,7 +30,7 @@ export async function operatorRoutes(app:FastifyInstance,db:DB,config:Config,pay
   });
   app.post("/tenants/:id/reconcile",async req=>{z.object({}).strict().parse(req.body);const {id}=z.object({id:z.string().min(1).max(64)}).parse(req.params);await payments.reconcile(id);return {ok:true};});
   app.get("/jobs",async()=>({work:await db("platform_work").select("id","kind","state","attempts","available_at","last_error"),emails:await db("platform_emails").select("id","kind","state","attempts","available_at","last_error")}));
-  app.post("/jobs/run",async req=>{z.object({}).strict().parse(req.body);await tick();return {ok:true};});
+  app.post("/jobs/run",async req=>{z.object({}).strict().parse(req.body);check(config.serverRole!=="api",409,"jobs_disabled","Job execution is disabled for the API server role.");await tick();return {ok:true};});
   app.post("/jobs/:table/:id/retry",async req=>{
     z.object({}).strict().parse(req.body);const {table,id}=z.object({table:z.enum(["platform_work","platform_emails"]),id:z.string().min(1).max(150)}).parse(req.params);
     check(await db(table).where({id,state:"failed"}).update({state:"pending",attempts:0,available_at:0,lease_until:0,lease_owner:null,last_error:null,created_at:Date.now()}),404,"not_found","Failed job not found.");

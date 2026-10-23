@@ -383,3 +383,44 @@ cleans its private work. The per-process limits do not replace filesystem quotas
 or fair scheduling across tenants with different bundle sizes.
 
 Development startup binds to `127.0.0.1`. Production uses `0.0.0.0` inside its container behind the configured HTTPS proxy; do not publish that application port directly on the host.
+
+## Blue/green API deployment
+
+Use two independent API resources with `SERVER_ROLE=api` and distinct
+`DEPLOYMENT_SLOT=blue` or `green` values. API instances check migration history
+at startup and never apply migrations or run background work. A separate
+`SERVER_ROLE=worker` resource owns the job timer and has no public route.
+Leave `DEPLOYMENT_SLOT` unset for the worker. The default `SERVER_ROLE=all`
+preserves the single-process self-hosted setup.
+
+The stable internal router uses the same runtime image with
+`ENTITLE_RUNTIME_MODE=api-router`, listens on port 3211, and reads
+`/routing/active-slot` from a read-only mount of its parent directory. Only
+`blue` and `green` are accepted. It verifies readiness and the backend role and
+slot headers before reloading Nginx. Existing requests drain through the previous
+workers; keep the previous API container running until its next reuse.
+Use writable UID/GID 101 tmpfs mounts at `/runtime` and `/cache`, as with the
+frontend runtime. Its health check uses `http://127.0.0.1:3211/healthz`.
+
+Promotion verifies the exact successful source CI and immutable digests, warms
+the inactive slot, stops and confirms clean exit of the old worker, switches
+traffic, then starts the new worker. Public smoke checks and a second observed
+image/role/slot check precede the healthy receipt. The private deployment
+repository owns the durable transaction journal, recovery, provisioning and
+operator runbook. A failed or interrupted worker stop retains the journal and
+refuses to start another worker.
+
+Automatic blue/green releases require the same migration fingerprint as the
+current healthy receipt. API rollback has the same schema guard. For a schema
+change, take a matching backup, stop API/worker writers, apply the explicit
+`SERVER_ROLE=migrate` entry point, and qualify the new version before restoring
+traffic. Never run down migrations as part of automated rollback. Startup
+migration-name checks supplement the deployment fingerprint; they do not prove
+that old code can use a changed schema.
+
+CI runs three independent test shards and constructs a per-run candidate image
+concurrently. Only successful checks may publish reusable input tags and the
+immutable release artifact. Frontend files still publish atomically without
+restarting API or frontend containers. Changed runtime code also runs real
+container routing checks. Measure accepted GitHub runs to compare wall time;
+local unit tests do not establish production availability or deployment speed.

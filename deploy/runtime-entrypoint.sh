@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+if [ "${ENTITLE_RUNTIME_MODE:-frontend}" = api-router ]; then
+    exec /usr/local/bin/entitle-api-router
+fi
+
 # Only validated operator configuration is expanded. Request forwarding headers
 # are never trusted for the public origin. ENTITLE_PUBLIC_HOST is required;
 # and keep ENTITLE_PUBLIC_SCHEME consistent with the API's PUBLIC_ORIGIN.

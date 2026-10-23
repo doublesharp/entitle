@@ -1,7 +1,26 @@
 import { resolve } from "node:path";
 import { z } from "zod";
 import { normalizeAppBasePath } from "../packages/shared/app-path.ts";
+export type ServerRole = "all" | "api" | "worker" | "migrate";
+export type DeploymentSlot = "blue" | "green";
+
+// Validate programmatic Config callers as well as environment configuration.
+export function serverIdentity(config: {
+  serverRole?: ServerRole;
+  deploymentSlot?: DeploymentSlot;
+}) {
+  const role = config.serverRole ?? "all";
+  if (!["all", "api", "worker", "migrate"].includes(role))
+    throw Error("SERVER_ROLE must be all, api, worker or migrate");
+  const slot = config.deploymentSlot;
+  if (slot !== undefined && slot !== "blue" && slot !== "green")
+    throw Error("DEPLOYMENT_SLOT must be blue or green");
+  return { role, slot };
+}
+
 export interface Config {
+  serverRole?: ServerRole;
+  deploymentSlot?: DeploymentSlot;
   deploymentMode: "standalone" | "hosted";
   standaloneOwnerEmail: string;
   standaloneStripeAccountId?: string;
@@ -70,6 +89,14 @@ export interface Config {
   };
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const { role: serverRole, slot: deploymentSlot } = serverIdentity({
+    ...(env.SERVER_ROLE === undefined
+      ? {}
+      : { serverRole: env.SERVER_ROLE as ServerRole }),
+    ...(env.DEPLOYMENT_SLOT === undefined
+      ? {}
+      : { deploymentSlot: env.DEPLOYMENT_SLOT as DeploymentSlot }),
+  });
   const standaloneStripeAccountId = env.STANDALONE_STRIPE_ACCOUNT_ID;
   if (
     standaloneStripeAccountId !== undefined &&
@@ -369,6 +396,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       );
   }
   return {
+    serverRole,
+    ...(deploymentSlot === undefined ? {} : { deploymentSlot }),
     ...(platformProStripePriceId ? { platformProStripePriceId } : {}),
     ...(env.STRIPE_TEST_SECRET_KEY
       ? {

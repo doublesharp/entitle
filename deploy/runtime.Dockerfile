@@ -6,6 +6,7 @@ RUN mkdir -p /runtime /cache /releases \
     && chown 101:101 /runtime /cache
 COPY deploy/nginx.conf.template /etc/entitle/nginx.conf.template
 COPY --chmod=0555 deploy/runtime-entrypoint.sh /usr/local/bin/entitle-runtime
+COPY --chmod=0555 deploy/api-router-entrypoint.sh /usr/local/bin/entitle-api-router
 USER 101:101
 ENV ENTITLE_API_UPSTREAM=entitle-api:3211 ENTITLE_PUBLIC_SCHEME=https
 # Supply ENTITLE_PUBLIC_HOST as the canonical public hostname, with optional port.

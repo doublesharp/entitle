@@ -32,24 +32,46 @@ export function createDb(url: string): DB {
     pool: { min: 0, max: 10 },
   });
 }
+const migrationNames = [
+  "001_initial",
+  "002_plugin_identity",
+  "003_tenants",
+  "004_stripe_status",
+  "005_security",
+  "006_checkout",
+  "007_frameworks",
+  "008_commerce",
+  "009_accounts",
+  "010_operations",
+  "011_sandboxes",
+  "012_business_events",
+  "013_platform_price_history",
+] as const;
+
+// Knex's migration listing can create its metadata tables. Serving roles only
+// inspect the existing history, so even an uninitialized DB remains untouched.
+export async function assertSchemaCurrent(db: DB): Promise<void> {
+  if (!(await db.schema.hasTable("knex_migrations")))
+    throw Error(
+      "Database schema migrations are missing; run SERVER_ROLE=migrate",
+    );
+  const rows = await db("knex_migrations").select<{ name: string }[]>("name");
+  const applied = new Set(rows.map(({ name }) => name));
+  const expected = new Set<string>(migrationNames);
+  if (
+    rows.length !== applied.size ||
+    [...applied].some((name) => !expected.has(name)) ||
+    migrationNames.some((name) => !applied.has(name))
+  )
+    throw Error(
+      "Database migration history does not match bundled schema migrations",
+    );
+}
+
 export async function migrate(db: DB) {
   await db.migrate.latest({
     migrationSource: {
-      getMigrations: async () => [
-        "001_initial",
-        "002_plugin_identity",
-        "003_tenants",
-        "004_stripe_status",
-        "005_security",
-        "006_checkout",
-        "007_frameworks",
-        "008_commerce",
-        "009_accounts",
-        "010_operations",
-        "011_sandboxes",
-        "012_business_events",
-        "013_platform_price_history",
-      ],
+      getMigrations: async () => [...migrationNames],
       getMigrationName: (m: string) => m,
       getMigration: async (m: string) =>
         m === "001_initial"

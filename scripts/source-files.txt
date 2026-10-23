@@ -17,6 +17,7 @@ apps/web/eslint.config.js
 apps/web/package.json
 apps/web/tsconfig.json
 deploy/Caddyfile
+deploy/api-router-entrypoint.sh
 deploy/compose.test.yaml
 deploy/compose.yaml
 deploy/nginx.conf.template
@@ -40,7 +41,9 @@ docs/platform-support.md
 docs/portability.md
 docs/seller-guide.md
 docs/superpowers/plans/2026-10-22-coolify-deployment.md
+docs/superpowers/plans/2026-10-23-blue-green-deployments.md
 docs/superpowers/plans/2026-10-23-marketing-app-split.md
+docs/superpowers/specs/2026-10-23-blue-green-design.md
 docs/testing.md
 docs/troubleshooting.md
 docs/webhooks.md
@@ -178,6 +181,7 @@ tests/JetBrainsScopeTest.java
 tests/accounts-management.test.ts
 tests/adapter-templates.test.ts
 tests/api-coverage.test.ts
+tests/api-router.test.mjs
 tests/api.test.ts
 tests/app-path.test.ts
 tests/backup-integration.test.ts
@@ -190,7 +194,9 @@ tests/business-events.test.ts
 tests/checkout-cookie.test.ts
 tests/checkout-schema.test.ts
 tests/checkout.test.ts
+tests/ci-image-publication.test.mjs
 tests/ci-results.test.mjs
+tests/ci-workflow.test.mjs
 tests/cli-coverage.test.ts
 tests/cli.test.ts
 tests/commerce-admin.test.ts
@@ -252,7 +258,9 @@ tests/sandboxes.test.ts
 tests/security-review.test.ts
 tests/seller-auth.test.ts
 tests/seller-ui.test.ts
+tests/server-container.test.mjs
 tests/server-coverage.test.ts
+tests/server-roles.test.ts
 tests/storage.test.ts
 tests/streaming-artifacts.test.ts
 tests/streaming-framework.test.ts
