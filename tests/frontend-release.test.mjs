@@ -11,6 +11,42 @@ const tool = path.join(repo, "scripts/deployment/frontend-release.mjs");
 const scratch = "/Volumes/Scratch/entitle/tmp/frontend-release";
 const sha = "a".repeat(40);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+test(
+  "production HTML contains distinct previews and deployable PNG assets before JavaScript runs",
+  {
+    skip: process.env.FRONTEND_BUILD_CHECK !== "1",
+  },
+  async () => {
+    assert.ok(
+      process.env.BUILD_DIR,
+      "BUILD_DIR is required to check frontend output",
+    );
+    const output = path.join(process.env.BUILD_DIR, "web");
+    const titles = new Set();
+    for (const page of ["home", "docs", "seller", "customer"]) {
+      const html = await fs.readFile(
+        path.join(output, page === "home" ? "index.html" : `${page}.html`),
+        "utf8",
+      );
+      const title = html.match(/<title>(.*?)<\/title>/g);
+      assert.equal(title?.length, 1, page);
+      titles.add(title[0]);
+      assert.match(html, /name="twitter:card" content="summary_large_image"/);
+      const image = new URL(
+        html.match(/property="og:image" content="([^"]+)"/)[1],
+      );
+      assert.equal(image.pathname, `/social/${page}.png`);
+      const png = await fs.readFile(path.join(output, image.pathname));
+      assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+      assert.equal(png.readUInt32BE(16), 1200);
+      assert.equal(png.readUInt32BE(20), 630);
+      assert.doesNotMatch(html, /PAGE_METADATA|%SITE_/);
+    }
+    assert.equal(titles.size, 4);
+  },
+);
+
 function cli(...args) {
   return spawnSync(process.execPath, [tool, ...args], { encoding: "utf8" });
 }
@@ -702,6 +738,11 @@ test(
   },
   async (t) => {
     const f = await fixture(t);
+    for (const page of ["docs", "seller", "customer"])
+      await fs.writeFile(
+        path.join(f.input, `${page}.html`),
+        `<html>${page} preview</html>`,
+      );
     const suffix = `${process.pid}-${Date.now()}`;
     const image = `entitle-runtime-smoke:${suffix}`;
     const network = `entitle-runtime-${suffix}`;
@@ -949,7 +990,17 @@ location / { default_type application/json; return 404 '{"error":"api_not_found"
     for (const uri of ["/", "/seller", "/t/example", "/docs", "/docs/"]) {
       const response = request(uri);
       assert.equal(response.status, 200, uri);
-      assert.equal(response.body, "<html>release one</html>");
+      const page = uri.startsWith("/docs")
+        ? "docs"
+        : uri === "/seller"
+          ? "seller"
+          : uri.startsWith("/t/")
+            ? "customer"
+            : null;
+      assert.equal(
+        response.body,
+        page ? `<html>${page} preview</html>` : "<html>release one</html>",
+      );
       assert.equal(response.headers["referrer-policy"], "no-referrer");
       assert.equal(response.headers["x-content-type-options"], "nosniff");
       assert.equal(response.headers["x-frame-options"], "SAMEORIGIN");
@@ -1119,6 +1170,9 @@ proxy_set_header Forwarded "host=attacker.example;proto=http";
     t.diagnostic(
       `untrusted direct client: forged 192.0.2.99 ignored; backend received TCP peer ${directIp}`,
     );
+    // A release from before page-specific shells must still work on this runtime.
+    for (const page of ["docs", "seller", "customer"])
+      await fs.rm(path.join(f.input, `${page}.html`));
     await fs.writeFile(
       path.join(f.input, "index.html"),
       "<html>release two</html>",
@@ -1139,8 +1193,11 @@ proxy_set_header Forwarded "host=attacker.example;proto=http";
     );
     assert.equal(request("/assets/app-one.js").body, "console.log(1);");
     assert.equal(request("/assets/app-two.js").body, "console.log(2);");
+    for (const uri of ["/docs", "/seller/", "/t/example/"])
+      assert.equal(request(uri).body, "<html>release two</html>");
     publish("rollback", "--root", "/releases", "--release", a.releaseId);
     assert.equal(request("/").body, "<html>release one</html>");
+    assert.equal(request("/docs").body, "<html>docs preview</html>");
     request("/seller?token=must-not-appear-in-logs");
     request("/missing?token=must-not-appear-in-logs");
     assert.doesNotMatch(docker("logs", runtime), /must-not-appear-in-logs/);

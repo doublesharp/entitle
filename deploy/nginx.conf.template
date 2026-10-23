@@ -74,8 +74,10 @@ http {
         location ~ (^|/)\. { return 404; }
         location = /healthz { try_files /index.html =503; }
         location = / { try_files /index.html =404; }
-        location ~ ^/(seller|docs)/?$ { try_files /index.html =404; }
-        location ~ ^/t/[^/]+/?$ { try_files /index.html =404; }
+        # Older releases have one shell. Keep them usable during rollout/rollback.
+        location ~ ^/seller/?$ { try_files /seller.html /index.html =404; }
+        location ~ ^/docs/?$ { try_files /docs.html /index.html =404; }
+        location ~ ^/t/[^/]+/?$ { try_files /customer.html /index.html =404; }
         # Only the application's known client routes get index.html.
         location / { try_files $uri =404; }
     }

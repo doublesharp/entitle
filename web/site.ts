@@ -312,12 +312,15 @@ const publicHome = () => [
       h(
         "p",
         { class: "hero-note" },
-        "Your Stripe account. Your customers. Your next release.",
+        "Your products. Your customers. Your next release.",
       ),
     ]),
     h(
       "figure",
-      { class: "release-illustration", "aria-labelledby": "workflow-caption" },
+      {
+        class: "release-illustration",
+        "aria-label": "From purchase to update",
+      },
       [
         h("div", { class: "illustration-top" }, [
           h(
@@ -333,7 +336,7 @@ const publicHome = () => [
             h("div", [
               h("span", { class: "workflow-overline" }, "01 / PAYMENT"),
               h("strong", "A customer checks out"),
-              h("span", "Your product. Your Stripe account."),
+              h("span", "Your product. A secure checkout."),
             ]),
             h(
               "span",
@@ -370,11 +373,6 @@ const publicHome = () => [
             ),
           ]),
         ]),
-        h(
-          "figcaption",
-          { id: "workflow-caption" },
-          `Illustrative workflow · powered by ${site.name}`,
-        ),
       ],
     ),
   ]),
@@ -434,7 +432,7 @@ const publicHome = () => [
           [
             "01",
             "Sell on your terms",
-            "Use Stripe Checkout or style your own form with Stripe Elements. Payments go to your connected Stripe account.",
+            "Offer hosted checkout or embed a payment form that fits your storefront. Customer payments go directly to your account.",
           ],
           [
             "02",
@@ -496,7 +494,7 @@ const publicHome = () => [
           ],
           [
             icons.card,
-            "Your customers, your Stripe",
+            "Your customers, your payments",
             "Use your own Stripe account for buyer checkout and billing. Your platform subscription is billed separately.",
           ],
           [
@@ -611,7 +609,7 @@ const publicHome = () => [
           h("h3", "Hosted service"),
           h(
             "p",
-            "Create a publisher workspace and connect your own Stripe account. The service operator runs the app, private storage and backups.",
+            "Create a publisher workspace and connect payments. The service operator runs the app, private storage and backups.",
           ),
           h("ul", [
             h(
@@ -626,7 +624,7 @@ const publicHome = () => [
           h(
             "p",
             { class: "hosting-cost" },
-            "Platform subscription and configured application fee, plus separate Stripe fees. Subscription amounts are shown at checkout; the dashboard shows the fee rate.",
+            "Platform subscription and configured application fee, plus separate payment processing fees. Subscription amounts are shown at checkout; the dashboard shows the fee rate.",
           ),
           h("a", { href: "/seller", class: "button" }, "Open seller dashboard"),
           h(
@@ -640,7 +638,7 @@ const publicHome = () => [
           h("h3", "Self-hosted standalone"),
           h(
             "p",
-            "Run Entitle for your own software business. Manage multiple products with your own Stripe account, database and private S3-compatible storage.",
+            "Run Entitle for your own software business. Manage multiple products with your own billing, database and private storage.",
           ),
           h("ul", [
             h(
@@ -652,7 +650,7 @@ const publicHome = () => [
           h(
             "p",
             { class: "hosting-cost" },
-            "No platform subscription or application fee. You supply hosting, storage, email and backups, and pay your provider and Stripe costs.",
+            "No platform subscription or application fee. You supply hosting, storage, email and backups, and pay your infrastructure and payment processing costs.",
           ),
           h(
             "a",
@@ -687,7 +685,7 @@ const publicHome = () => [
       ...[
         [
           "Can I keep my own website and checkout design?",
-          "Yes. Your storefront can start Stripe Checkout or use Stripe Elements for a styled payment form. Entitle controls prices and paid access on the server.",
+          "Yes. Use hosted checkout or embed a payment form styled to fit your storefront. Entitle controls prices and paid access on the server.",
           "/docs#checkout",
           "Explore checkout integration",
         ],
@@ -724,7 +722,7 @@ const publicHome = () => [
       h("h2", { id: "start-title" }, "Build the software. Grow the business."),
       h(
         "p",
-        "Bring your product and your Stripe account. Give your customers a better way to buy, activate and stay up to date.",
+        "Give your customers a better way to buy, activate and stay up to date.",
       ),
     ]),
     h("div", { class: "home-cta-actions" }, [

@@ -10,6 +10,7 @@ import { buildApp } from "../src/app.ts";
 import { hash, unseal } from "../src/crypto.ts";
 import type { Message } from "../src/email.ts";
 import { Licenses } from "../src/licensing.ts";
+import { renderPageMetadata } from "../web/metadata.ts";
 const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/api-");
 const db = createDb(`sqlite:${root}/db`);
 const config = {
@@ -41,6 +42,11 @@ await writeFile(
   `${config.staticDir}/index.html`,
   "<!doctype html><title>Doublesharp Entitle</title>",
 );
+for (const page of ["docs", "seller", "customer"] as const)
+  await writeFile(
+    `${config.staticDir}/${page}.html`,
+    `<!doctype html><head>${renderPageMetadata(page, config.origin)}</head>`,
+  );
 const store = new InMemoryArtifactStore();
 const app = await buildApp(config, db, undefined, { store });
 before(async () => {
@@ -72,6 +78,25 @@ beforeEach(async () => {
       stripe_id: "cus_bob",
     },
   ]);
+});
+
+test("page routes serve their own crawler-visible previews without query credentials", async () => {
+  for (const [path, title] of [
+    ["/docs", "Documentation"],
+    ["/docs/", "Documentation"],
+    ["/seller", "Seller dashboard"],
+    ["/seller/", "Seller dashboard"],
+    ["/t/primary", "Customer account"],
+    ["/t/primary/", "Customer account"],
+  ] as const) {
+    const response = await app.inject({
+      url: `${path}?token=PRIVATE_SENTINEL`,
+    });
+    assert.equal(response.statusCode, 200, path);
+    assert.ok(response.body.includes(`<title>${title}`), path);
+    assert.ok(response.body.includes('property="og:image"'), path);
+    assert.ok(!response.body.includes("PRIVATE_SENTINEL"), path);
+  }
 });
 async function login() {
   await app.inject({

@@ -108,6 +108,8 @@ jobs:
       - run: pnpm typecheck:web && pnpm lint:web && pnpm test:web
       - run: pnpm build:web
       - run: node --test tests/frontend-release.test.mjs
+        env:
+          FRONTEND_BUILD_CHECK: '1'
       - name: Pack immutable frontend
         env:
           SOURCE_SHA: ${{ github.sha }}

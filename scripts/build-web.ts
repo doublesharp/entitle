@@ -1,9 +1,9 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { packageSource, browserNotices } from "./distribution.ts";
-import { site } from "../packages/shared/site.ts";
+import { renderPageMetadata } from "../web/metadata.ts";
 const out = resolve(
   process.env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main",
 );
@@ -12,11 +12,6 @@ const { build } = (await import(
   pathToFileURL(requireWeb.resolve("vite")).href
 )) as typeof import("vite");
 const browserModules = new Set<string>();
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll('"', "&quot;");
 await build({
   root: "web",
   resolve: {
@@ -40,14 +35,28 @@ await build({
       transformIndexHtml: {
         order: "pre",
         handler: (html) =>
-          html
-            .replaceAll("%SITE_NAME%", escapeHtml(site.name))
-            .replaceAll("%SITE_TAGLINE%", escapeHtml(site.tagline))
-            .replaceAll("%SITE_DESCRIPTION%", escapeHtml(site.description)),
+          html.replace(
+            "<!-- PAGE_METADATA -->",
+            renderPageMetadata("home", process.env.WEB_PUBLIC_ORIGIN),
+          ),
       },
     },
   ],
 });
+
+// Reuse Vite's final script/style URLs, with metadata present before JavaScript runs.
+const home = await readFile(`${out}/web/index.html`, "utf8");
+const homeMetadata = renderPageMetadata("home", process.env.WEB_PUBLIC_ORIGIN);
+if (!home.includes(homeMetadata))
+  throw new Error("Built HTML is missing the expected page metadata.");
+for (const page of ["docs", "seller", "customer"] as const)
+  await writeFile(
+    `${out}/web/${page}.html`,
+    home.replace(
+      homeMetadata,
+      renderPageMetadata(page, process.env.WEB_PUBLIC_ORIGIN),
+    ),
+  );
 
 await packageSource(process.cwd(), `${out}/web`);
 await writeFile(

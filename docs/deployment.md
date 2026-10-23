@@ -1,5 +1,13 @@
 # Deployment
 
+The frontend build embeds Open Graph and Twitter preview metadata for the home,
+documentation, seller and customer pages. Preview images are public PNG assets.
+For a self-hosted domain, set `WEB_PUBLIC_ORIGIN=https://licenses.example.com`
+when running `pnpm build:web`; it defaults to `https://entitle.doublesharp.com`.
+This build setting controls metadata URLs only. Keep `PUBLIC_ORIGIN` configured
+on the API for authentication and checkout. Customer previews are generic,
+exclude account data and request no indexing.
+
 Run the server and a static web runtime behind HTTPS. The server runs the API and database-backed jobs. The web runtime serves independently published Vue assets and forwards API requests on the same origin. SQLite needs persistent local storage; PostgreSQL/MySQL are alternatives. Artifacts live in a private S3-compatible bucket. Redis is an optional cache. Use the [configuration reference](configuration.md) for environment defaults and validation, [CLI reference](cli.md) for automation, and [troubleshooting](troubleshooting.md) for failed setup or delivery.
 
 ## Using the hosted service
