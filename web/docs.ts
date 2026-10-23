@@ -999,7 +999,7 @@ export function publicDocs(
       ),
       section("self-hosting", "Operators", "Deploy and configure the service", [
         paragraph(
-          "One application serves the API, built Vue interfaces and database-backed jobs. Run it behind an HTTPS proxy with a persistent SQLite database or configured PostgreSQL/MySQL, private S3-compatible storage and SMTP. Redis is optional. The source package contains deploy/compose.yaml, .env.example and the full deployment/configuration guides.",
+          "Build the API and Vue interfaces independently with pnpm build:server and pnpm build:web. The API runs database-backed jobs; a separate web runtime serves immutable frontend releases and proxies API requests. Static content changes can publish without rebuilding either runtime image. Run behind HTTPS with a persistent SQLite database or configured PostgreSQL/MySQL, private S3-compatible storage and SMTP. Redis is optional. The source package contains deploy/compose.yaml, .env.example and the full deployment/configuration guides.",
         ),
         table(
           "Required production settings",
