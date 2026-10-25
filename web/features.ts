@@ -1,5 +1,13 @@
 import { applicationHref } from "./navigation.ts";
-import { defineComponent, h, nextTick, onMounted, onUnmounted, ref } from "vue";
+import {
+  defineComponent,
+  h,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import type { PropType } from "vue";
 import { ApiClient, ApiError, errorMessage } from "./api.ts";
 
@@ -9,6 +17,12 @@ type Confirm = (
   action: () => Promise<void>,
 ) => void;
 type Values = Record<string, string | number | boolean>;
+export interface EmailChangeDraft {
+  id: string;
+  currentToken: string;
+  newToken: string;
+  pendingTokens: string[];
+}
 interface FeatureProduct {
   id: string;
   name: string;
@@ -154,6 +168,10 @@ export const SellerFeaturePanel = defineComponent({
   props: {
     page: { type: String, required: true },
     initialToken: { type: String, default: "" },
+    emailChange: {
+      type: Object as PropType<EmailChangeDraft | null>,
+      default: null,
+    },
     invalidateProof: {
       type: Function as PropType<(page: string, token: string) => void>,
     },
@@ -165,7 +183,7 @@ export const SellerFeaturePanel = defineComponent({
     products: { type: Array as PropType<FeatureProduct[]>, required: true },
     confirm: { type: Function as PropType<Confirm>, required: true },
   },
-  emits: ["expired", "signedOut"],
+  emits: ["expired", "signedOut", "update:emailChange"],
   setup(props, { emit }) {
     const loading = ref(true),
       pending = ref(false),
@@ -185,6 +203,37 @@ export const SellerFeaturePanel = defineComponent({
       passphrase: "",
       verificationToken: "",
     });
+    const pendingEmailTokens = ref<string[]>([]);
+    watch(
+      () => props.emailChange,
+      (draft) => {
+        values.value.changeId = draft?.id || "";
+        values.value.currentToken = draft?.currentToken || "";
+        values.value.newToken = draft?.newToken || "";
+        pendingEmailTokens.value = (draft?.pendingTokens || []).slice(-1);
+      },
+      { immediate: true },
+    );
+    const retainEmailChange = () =>
+      emit("update:emailChange", {
+        id: String(values.value.changeId || ""),
+        currentToken: String(values.value.currentToken || ""),
+        newToken: String(values.value.newToken || ""),
+        pendingTokens: [...pendingEmailTokens.value],
+      } satisfies EmailChangeDraft);
+    const useEmailChangeLink = (mailbox: "currentToken" | "newToken") => {
+      const proof = pendingEmailTokens.value[0];
+      if (!proof) return;
+      const other = mailbox === "currentToken" ? "newToken" : "currentToken";
+      if (values.value[other] === proof) {
+        error.value = "Use a link from the different mailbox for this proof.";
+        return;
+      }
+      values.value[mailbox] = proof;
+      pendingEmailTokens.value = pendingEmailTokens.value.slice(1);
+      error.value = "";
+      retainEmailChange();
+    };
     const initialProof = props.initialToken;
     const proofArrived = Boolean(initialProof);
     values.value["verification-token"] = initialProof;
@@ -364,6 +413,14 @@ export const SellerFeaturePanel = defineComponent({
           value: values.value[id],
           onInput: (event: Event) => {
             values.value[id] = (event.target as HTMLInputElement).value;
+            if (["changeId", "currentToken", "newToken"].includes(id)) {
+              if (id === "changeId") {
+                values.value.currentToken = "";
+                values.value.newToken = "";
+                pendingEmailTokens.value = [];
+              }
+              retainEmailChange();
+            }
           },
         }),
       ]);
@@ -1153,8 +1210,29 @@ export const SellerFeaturePanel = defineComponent({
         disclosure(
           "security-email",
           "Change account email",
-          "Confirm from both mailboxes in this browser. You'll sign in again, and your current recovery codes will stop working. Create new ones afterward.",
+          "Confirm from both mailboxes in this browser. Open each mailbox link in this tab and identify which mailbox supplied it. If you opened both before choosing, reopen the other link next. You'll sign in again, and your current recovery codes will stop working. Create new ones afterward.",
           [
+            pendingEmailTokens.value.length > 0 &&
+              h(
+                "div",
+                { id: "email-change-link", class: "verification-proof" },
+                [
+                  h(
+                    "p",
+                    "Which mailbox supplied the link you most recently opened?",
+                  ),
+                  button(
+                    "Use link from current mailbox",
+                    () => useEmailChangeLink("currentToken"),
+                    pending.value,
+                  ),
+                  button(
+                    "Use link from new mailbox",
+                    () => useEmailChangeLink("newToken"),
+                    pending.value,
+                  ),
+                ],
+              ),
             form(
               "email-change-request",
               "Request email change",
@@ -1165,8 +1243,12 @@ export const SellerFeaturePanel = defineComponent({
                   { email: values.value.email },
                 );
                 values.value.changeId = result.id;
+                values.value.currentToken = "";
+                values.value.newToken = "";
+                pendingEmailTokens.value = [];
+                retainEmailChange();
                 notice.value =
-                  "Check both mailboxes and enter each proof below.";
+                  "Check both mailboxes and open each link in this tab.";
               },
             ),
             form(
@@ -1183,8 +1265,19 @@ export const SellerFeaturePanel = defineComponent({
                   currentToken: values.value.currentToken,
                   newToken: values.value.newToken,
                 };
+                if (
+                  !body.id ||
+                  !body.currentToken ||
+                  !body.newToken ||
+                  body.currentToken === body.newToken
+                )
+                  throw new ApiError(
+                    "Proofs from both different mailboxes are required before confirming the email change.",
+                  );
                 values.value.currentToken = "";
                 values.value.newToken = "";
+                pendingEmailTokens.value = [];
+                emit("update:emailChange", null);
                 await props.platform.post(
                   "/account/email-change/confirm",
                   body,
@@ -1193,6 +1286,7 @@ export const SellerFeaturePanel = defineComponent({
               },
             ),
           ],
+          Boolean(props.emailChange),
         ),
     ];
     const portability = () => [

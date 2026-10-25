@@ -17,6 +17,7 @@ import type { Framework, FrameworkProduct, ReleaseAsset } from "./api.ts";
 import type { Tenant } from "../packages/shared/tenant.ts";
 import { site } from "../packages/shared/site.ts";
 import { SellerFeaturePanel, verifiedRequest } from "./features.ts";
+import type { EmailChangeDraft } from "./features.ts";
 import { appHeader } from "./chrome.ts";
 import { applicationHref } from "./navigation.ts";
 
@@ -105,6 +106,22 @@ interface Key {
   created_at: number;
   revoked_at: number | null;
 }
+
+const emailChangeStorageKey = "entitle:email-change";
+const emailChangePart = (value: unknown): value is string =>
+  typeof value === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(value);
+const emailChangeDraft = (value: unknown): value is EmailChangeDraft => {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<EmailChangeDraft>;
+  return (
+    emailChangePart(draft.id) &&
+    (draft.currentToken === "" || emailChangePart(draft.currentToken)) &&
+    (draft.newToken === "" || emailChangePart(draft.newToken)) &&
+    Array.isArray(draft.pendingTokens) &&
+    draft.pendingTokens.length <= 2 &&
+    draft.pendingTokens.every(emailChangePart)
+  );
+};
 
 const sellerPages = [
   { id: "overview", label: "Overview" },
@@ -250,6 +267,7 @@ export function mountSellerApp(
         const activePage = ref<SellerPage>("overview"),
           recoveryOpen = ref(false),
           accountProof = ref(""),
+          emailChange = ref<EmailChangeDraft | null>(null),
           proofRound = ref(0),
           panelProof = ref<{ page: SellerPage; token: string } | null>(null),
           proofPurpose = ref("api_keys");
@@ -270,6 +288,7 @@ export function mountSellerApp(
           token = ref<string | null>(null),
           secret = ref("");
         const maxUpload = ref(26214400),
+          maxNativeUpload = ref(104857600),
           file = ref<File | null>(null),
           confirmation = ref<{
             title: string;
@@ -312,6 +331,65 @@ export function mountSellerApp(
           "key-expiry": "90",
           "config-product": "",
         });
+        let receivedEmailChange: { id: string; token: string } | null = null;
+        let emailChangeExpiresAt = 0;
+        const retainEmailChange = (draft: EmailChangeDraft | null) => {
+          if (draft && emailChange.value?.id !== draft.id)
+            emailChangeExpiresAt = Date.now() + 900000;
+          emailChange.value = draft;
+          try {
+            if (draft && seller.value)
+              window.sessionStorage.setItem(
+                emailChangeStorageKey,
+                JSON.stringify({
+                  sellerId: seller.value.user.id,
+                  expiresAt: emailChangeExpiresAt,
+                  draft,
+                }),
+              );
+            else window.sessionStorage.removeItem(emailChangeStorageKey);
+          } catch {
+            // The current page can still collect both links when storage is disabled.
+          }
+        };
+        const restoreEmailChange = () => {
+          if (emailChange.value) return;
+          try {
+            const saved = JSON.parse(
+              window.sessionStorage.getItem(emailChangeStorageKey) || "null",
+            ) as Record<string, unknown> | null;
+            if (
+              saved?.sellerId === seller.value?.user.id &&
+              typeof saved?.expiresAt === "number" &&
+              saved.expiresAt > Date.now() &&
+              saved.expiresAt <= Date.now() + 900000 &&
+              emailChangeDraft(saved.draft)
+            ) {
+              emailChange.value = saved.draft;
+              emailChangeExpiresAt = saved.expiresAt;
+              return;
+            }
+          } catch {
+            // Ignore unavailable storage and discard malformed saved proofs.
+          }
+          retainEmailChange(null);
+        };
+        const receiveEmailChange = () => {
+          if (!receivedEmailChange || !seller.value) return;
+          const { id, token } = receivedEmailChange;
+          const draft =
+            emailChange.value?.id === id
+              ? emailChange.value
+              : { id, currentToken: "", newToken: "", pendingTokens: [] };
+          // Mailbox selection refers to the link just opened, never an older queue entry.
+          const pendingTokens = [draft.currentToken, draft.newToken].includes(
+            token,
+          )
+            ? []
+            : [token];
+          retainEmailChange({ ...draft, pendingTokens });
+          receivedEmailChange = null;
+        };
         const tenantApi = () => {
           const api = new ApiClient(
             transport,
@@ -325,6 +403,8 @@ export function mountSellerApp(
           seller.value = null;
           platform.csrfToken = "";
           accountProof.value = "";
+          receivedEmailChange = null;
+          retainEmailChange(null);
           panelProof.value = null;
           recoveryOpen.value = false;
           overview.value = null;
@@ -419,8 +499,13 @@ export function mountSellerApp(
             typeof value.csrfToken !== "string"
           )
             throw new Error("Invalid seller session");
+          if (seller.value && seller.value.user.id !== value.user.id)
+            retainEmailChange(null);
           seller.value = value;
           platform.csrfToken = value.csrfToken;
+          restoreEmailChange();
+          receiveEmailChange();
+          if (emailChange.value) activePage.value = "security";
           const requested = new URLSearchParams(window.location.search).get(
             "tenant",
           );
@@ -445,13 +530,29 @@ export function mountSellerApp(
             );
           }
           if (fragment.has("account-email-change")) {
-            notice.value =
-              "Open Account security and enter the request ID and both mailbox tokens to confirm your email change.";
+            const id = fragment.get("account-email-change"),
+              proof = fragment.get("token");
             window.history.replaceState(
               null,
               "",
               window.location.pathname + window.location.search,
             );
+            activePage.value = "security";
+            if (
+              fragment.getAll("account-email-change").length !== 1 ||
+              fragment.getAll("token").length !== 1 ||
+              !emailChangePart(id) ||
+              !emailChangePart(proof)
+            ) {
+              error.value =
+                "This email-change link is incomplete or invalid. Open a fresh link from each mailbox.";
+            } else {
+              receivedEmailChange = { id, token: proof };
+              receiveEmailChange();
+              error.value = "";
+              notice.value =
+                "Email-change link received. Choose which mailbox supplied it before confirming the change.";
+            }
           }
           if (fragment.has("seller-login")) {
             token.value = fragment.get("seller-login") || "";
@@ -471,6 +572,7 @@ export function mountSellerApp(
             hosted.value = info.deploymentMode !== "standalone";
             applicationFeePercent.value = info.applicationFeePercent ?? 0;
             maxUpload.value = info.maxUploadBytes;
+            maxNativeUpload.value = info.maxNativeUploadBytes ?? 104857600;
             await session();
           }).finally(() => {
             loading.value = false;
@@ -597,6 +699,10 @@ export function mountSellerApp(
           overview.value!.products.find(
             (p) => p.id === fields.value["release-product"],
           );
+        const releaseUploadLimit = () =>
+          frameworkOf(releaseProduct()) === "wordpress"
+            ? maxUpload.value
+            : maxNativeUpload.value;
         const configProduct = () =>
           overview.value!.products.find(
             (p) => p.slug === fields.value["config-product"],
@@ -1080,7 +1186,7 @@ export function mountSellerApp(
             panel("releases", "Private releases", [
               h(
                 "p",
-                `Maximum ${maxUpload.value / 1048576} MiB per asset. Framework package validation and tenant storage quotas are enforced by the server. Published version notes and target bytes cannot be replaced.`,
+                `Maximum ${releaseUploadLimit() / 1048576} MiB per asset. Framework package validation and tenant storage quotas are enforced by the server. Published version notes and target bytes cannot be replaced.`,
               ),
               form(
                 "release-upload",
@@ -1092,9 +1198,9 @@ export function mountSellerApp(
                         ? "Choose a plugin ZIP."
                         : "Choose a release asset.",
                     );
-                  if (file.value.size > maxUpload.value)
+                  if (file.value.size > releaseUploadLimit())
                     throw new ApiError(
-                      `Choose a ${framework === "wordpress" ? "ZIP" : "release asset"} no larger than ${maxUpload.value / 1048576} MiB.`,
+                      `Choose a ${framework === "wordpress" ? "ZIP" : "release asset"} no larger than ${releaseUploadLimit() / 1048576} MiB.`,
                     );
                   if (
                     frameworkInfo[framework].signature &&
@@ -1958,6 +2064,11 @@ export function mountSellerApp(
                                     run: action,
                                   };
                                 },
+                                emailChange:
+                                  activePage.value === "security"
+                                    ? emailChange.value
+                                    : null,
+                                "onUpdate:emailChange": retainEmailChange,
                                 initialToken:
                                   panelProof.value?.page === activePage.value
                                     ? panelProof.value.token

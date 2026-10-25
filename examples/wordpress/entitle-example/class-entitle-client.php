@@ -118,6 +118,10 @@ class Entitle_Client {
         $status = wp_remote_retrieve_response_code($reply);
         if ($status === 204) { return array('empty' => true); }
         if ($status < 200 || $status >= 300) {
+            $error = json_decode(wp_remote_retrieve_body($reply), true);
+            if ($status === 401 && is_array($error) && isset($error['error']) && is_array($error['error']) && isset($error['error']['code']) && $error['error']['code'] === 'invalid_activation') {
+                return new WP_Error('entitle_invalid_activation', 'The activation is invalid or has been revoked.');
+            }
             return new WP_Error(in_array($status, array(401, 403), true) ? 'entitle_denied' : 'entitle_request', 'The licensing request was declined. Check the license and service configuration.');
         }
         $data = json_decode(wp_remote_retrieve_body($reply), true);
@@ -133,6 +137,10 @@ class Entitle_Client {
     public function activate($key) {
         // Step 1: validate the input and send the key with this site's stable identity.
         if (!is_string($key) || !trim($key) || strlen($key) > 1024) { return new WP_Error('entitle_key', 'Enter a valid license key.'); }
+        $key_hash = hash('sha256', trim($key));
+        if (get_option('entitle_token') && get_option('entitle_key_hash', '') !== $key_hash) {
+            return new WP_Error('entitle_active', 'Deactivate the current license before activating another key.');
+        }
         $reply = $this->request('/activate', 'POST', array('key' => trim($key), 'installationId' => $this->installation_id(), 'siteUrl' => home_url(), 'product' => $this->product()), false);
         if (is_wp_error($reply)) { return $reply; }
         if (empty($reply['token']) || !is_string($reply['token']) || !preg_match('/^[A-Za-z0-9_-]{1,1024}$/D', $reply['token']) || !isset($reply['installationId']) || $reply['installationId'] !== $this->installation_id()) {
@@ -142,7 +150,8 @@ class Entitle_Client {
         $this->clear_cache();
         // Step 3: store the token and display metadata, then refresh update offers.
         update_option('entitle_token', $reply['token'], false);
-        // Never persist the raw key. The installation token is sufficient after activation.
+        // Retain only a fingerprint for same-key retries; never persist the raw key.
+        update_option('entitle_key_hash', $key_hash, false);
         update_option('entitle_paid_through', isset($reply['paidThrough']) ? $reply['paidThrough'] : null, false);
         $this->clear_cache();
         return true;
@@ -151,14 +160,17 @@ class Entitle_Client {
     /**
      * Release server access, then clear local credentials and cached offers.
      *
-     * @return true|WP_Error True on confirmed deactivation; failures keep the token for retry.
+     * @return true|WP_Error True when deactivated or already invalid; other failures keep the token for retry.
      */
     public function deactivate() {
         $reply = $this->request('/deactivate', 'POST', (object) array());
-        if (is_wp_error($reply)) { return $reply; }
-        if (empty($reply['ok'])) { return new WP_Error('entitle_response', 'The licensing service did not confirm deactivation.'); }
+        if (is_wp_error($reply)) {
+            // A lost success response makes a retry report an already revoked token.
+            if ($reply->get_error_code() !== 'entitle_invalid_activation') { return $reply; }
+        } elseif (empty($reply['ok'])) { return new WP_Error('entitle_response', 'The licensing service did not confirm deactivation.'); }
         $this->clear_cache();
         delete_option('entitle_token');
+        delete_option('entitle_key_hash');
         delete_option('entitle_paid_through');
         // Keep the installation UUID even when this plugin is disabled or its license deactivated.
         return true;
@@ -212,7 +224,7 @@ class Entitle_Client {
         if (!$force && is_array($cached) && $cached['checked_at'] > time() - HOUR_IN_SECONDS) { return $cached['data']; }
         $reply = $this->request('/updates/' . rawurlencode($this->product()));
         if (is_wp_error($reply)) {
-            if ($reply->get_error_code() === 'entitle_denied') {
+            if (in_array($reply->get_error_code(), array('entitle_denied', 'entitle_invalid_activation'), true)) {
                 delete_site_transient($this->cache_key());
                 return false;
             }
@@ -374,7 +386,11 @@ class Entitle_Client {
         wp_nonce_field('entitle_license');
         echo '<input type="hidden" name="action" value="entitle_license"><label for="de-license">License key</label> <input id="de-license" type="password" name="license_key" value="" autocomplete="off"> ';
         submit_button('Activate', 'primary', 'activate', false);
-        if (get_option('entitle_token')) { echo ' '; submit_button('Deactivate license', 'secondary', 'deactivate', false); }
+        if (get_option('entitle_token')) {
+            echo ' ';
+            submit_button('Deactivate license', 'secondary', 'deactivate', false);
+            echo '<p>Deactivate the current license before entering a different key.</p>';
+        }
         echo '</form></div>';
     }
 

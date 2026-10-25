@@ -53,6 +53,21 @@ check(true === $client->activate('fixture_license'), 'activation succeeds');
 check(strpos($GLOBALS['requests'][0][0], 'fixture_license') === false, 'key must stay out of URLs');
 check(get_option('entitle_token') === 'fixture_token', 'activation token persists');
 check(!get_option('entitle_license_key'), 'raw license key is not stored');
+$before_requests = count($GLOBALS['requests']);
+$GLOBALS['reply']['body'] = json_encode(array('token' => 'replacement_token', 'installationId' => $client->installation_id()));
+$replacement = $client->activate('another_license');
+check(is_wp_error($replacement) && $replacement->get_error_code() === 'entitle_active', 'switching keys requires releasing the existing license first');
+check(count($GLOBALS['requests']) === $before_requests, 'blocked key replacement must not consume another license seat');
+check(get_option('entitle_token') === 'fixture_token', 'blocked replacement preserves the original activation token');
+$GLOBALS['reply']['body'] = json_encode(array('token' => 'fixture_token', 'installationId' => $client->installation_id()));
+$reopened = new Entitle_Client(dirname(__DIR__) . '/entitle-example/entitle-example.php', '1.0.0');
+check(true === $reopened->activate(' fixture_license '), 'same-key activation retries remain idempotent across client instances');
+$key_hash = get_option('entitle_key_hash');
+delete_option('entitle_key_hash');
+$before_requests = count($GLOBALS['requests']);
+check(is_wp_error($client->activate('another_license')), 'legacy activations require explicit deactivation before entering a key');
+check(count($GLOBALS['requests']) === $before_requests && get_option('entitle_token') === 'fixture_token', 'legacy activation guard preserves its existing seat and token');
+update_option('entitle_key_hash', $key_hash, false);
 $base = $client->api_base();
 $package = $base . '/packages/fixture-release';
 $args = $client->package_headers(array('headers' => array(), 'redirection' => 5), $package);
@@ -128,6 +143,31 @@ check($GLOBALS['deleted_download'] === __FILE__, 'checksum mismatch cleans the d
 $GLOBALS['reply'] = new WP_Error('network', 'secret');
 check(is_wp_error($client->deactivate()), 'outage during deactivation retains activation');
 check(get_option('entitle_token') === 'fixture_token', 'failed deactivation retains token for retry');
+foreach (array(
+    array('response' => array('code' => 401), 'body' => '{"error":{"code":"invalid_license"}}'),
+    array('response' => array('code' => 403), 'body' => '{"error":{"code":"invalid_activation"}}'),
+    array('response' => array('code' => 503), 'body' => '{"error":{"code":"invalid_activation"}}'),
+    array('response' => array('code' => 401), 'body' => '{"error":{"message":"fixture_token secret"}}'),
+    array('response' => array('code' => 401), 'body' => 'not JSON'),
+    array('response' => array('code' => 200), 'body' => '{"ok":false}')
+) as $denied) {
+    $GLOBALS['reply'] = $denied;
+    check(is_wp_error($client->deactivate()), 'unconfirmed deactivation must remain retryable');
+    check(get_option('entitle_token') === 'fixture_token', 'other denials must preserve the activation token');
+}
+$GLOBALS['reply'] = array('response' => array('code' => 401), 'body' => '{"error":{"code":"invalid_activation","message":"fixture_token secret"}}');
+check($client->metadata(true) === false, 'revoked activation removes its cached update offer');
+check(get_option('entitle_token') === 'fixture_token', 'metadata checks retain revoked credentials for explicit deactivation');
+$cache_key = 'entitle_meta_' . md5($client->api_base() . '|' . $client->product() . '|fixture_token');
+set_site_transient($cache_key, array('checked_at' => time(), 'data' => $metadata), DAY_IN_SECONDS);
+set_site_transient('update_plugins', (object) array('response' => array()), DAY_IN_SECONDS);
+update_option('entitle_paid_through', 12345);
+check($client->deactivate() === true, 'retry after a lost deactivation response clears an already invalid activation');
+check(!get_option('entitle_token') && !get_option('entitle_paid_through'), 'confirmed invalid activation clears local credentials');
+check(!get_site_transient($cache_key) && !get_site_transient('update_plugins'), 'deactivation retry clears credential metadata and update offers');
+check($client->installation_id() === '73418cab-0dda-410d-85fd-c3f1d553fd5d', 'deactivation retry preserves installation UUID');
+$GLOBALS['reply'] = array('response' => array('code' => 200), 'body' => json_encode(array('token' => 'next_token', 'installationId' => $client->installation_id())));
+check($client->activate('next_license') === true, 'a different key can activate after confirmed deactivation');
 $GLOBALS['reply'] = array('response' => array('code' => 200), 'body' => '{"ok":true}');
 check($client->deactivate() === true, 'deactivation succeeds');
 check(!get_option('entitle_token'), 'deactivation clears token');

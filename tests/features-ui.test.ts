@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, test } from "node:test";
 import { Window } from "happy-dom";
 import type { App } from "vue";
+import type { EmailChangeDraft } from "../web/features.ts";
 import { ApiClient } from "../web/api.ts";
 const dom = new Window({ url: "http://localhost/seller" });
 for (const name of [
@@ -22,9 +23,10 @@ for (const name of [
         ? dom
         : (dom as unknown as Record<string, unknown>)[name],
   });
-const { createApp, h, nextTick } = await import("vue");
+const { createApp, h, nextTick, ref } = await import("vue");
 const ui = await import("../web/features.ts");
 let app: App | undefined;
+let emailChangeState = ref<EmailChangeDraft | null>(null);
 const redirects: string[] = [];
 const confirmations: string[] = [];
 Object.defineProperty(dom.location, "assign", {
@@ -103,15 +105,21 @@ async function mount(
   subscribed = false,
   taxCode?: string,
   initialToken = "",
+  emailChange: EmailChangeDraft | null = null,
 ) {
   app?.unmount();
   calls.length = 0;
+  emailChangeState = ref(emailChange);
   dom.document.body.innerHTML = '<div id="app"></div>';
   app = createApp({
     render: () =>
       h(ui.SellerFeaturePanel, {
         page,
         initialToken,
+        emailChange: emailChangeState.value,
+        "onUpdate:emailChange": (value: EmailChangeDraft | null) => {
+          emailChangeState.value = value;
+        },
         api,
         platform,
         hosted,
@@ -1202,4 +1210,105 @@ test("resending a verification link discards the invalidated token and resets se
     /Link sent|Verification link received/,
   );
   assert.match(dom.document.body.textContent!, /offline-once/);
+});
+
+test("email change assigns only the most recently opened link to an explicitly selected mailbox", async () => {
+  handler = (path) =>
+    path.endsWith("/sessions") ? { sessions: [] } : { ok: true };
+  await mount("security", true, false, undefined, "", {
+    id: "request-id",
+    currentToken: "",
+    newToken: "",
+    pendingTokens: ["current-proof", "new-proof"],
+  });
+  assert.equal((element("#changeId") as HTMLInputElement).value, "request-id");
+  assert.equal((element("#security-email") as HTMLDetailsElement).open, true);
+  assert.equal((element("#currentToken") as HTMLInputElement).value, "");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "");
+  assert.equal(calls.length, 1);
+  await click("Use link from new mailbox");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "new-proof");
+  assert.equal(dom.document.querySelector("#email-change-link"), null);
+  emailChangeState.value = {
+    ...emailChangeState.value!,
+    pendingTokens: ["current-proof"],
+  };
+  await flush();
+  await click("Use link from current mailbox");
+  assert.equal(
+    (element("#currentToken") as HTMLInputElement).value,
+    "current-proof",
+  );
+  assert.deepEqual(emailChangeState.value, {
+    id: "request-id",
+    currentToken: "current-proof",
+    newToken: "new-proof",
+    pendingTokens: [],
+  });
+  assert.doesNotMatch(
+    dom.document.body.textContent!,
+    /current-proof|new-proof/,
+  );
+  await submit("email-change-confirm");
+  assert.deepEqual(calls.at(-1)?.body, {
+    id: "request-id",
+    currentToken: "current-proof",
+    newToken: "new-proof",
+  });
+  assert.equal(emailChangeState.value, null);
+  assert.equal((element("#currentToken") as HTMLInputElement).value, "");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "");
+});
+test("email change receives new link props without losing a previously assigned proof", async () => {
+  handler = () => ({ sessions: [] });
+  await mount("security", true, false, undefined, "", {
+    id: "request-id",
+    currentToken: "",
+    newToken: "",
+    pendingTokens: ["current-proof"],
+  });
+  await click("Use link from current mailbox");
+  emailChangeState.value = {
+    ...emailChangeState.value!,
+    pendingTokens: ["new-proof"],
+  };
+  await flush();
+  assert.equal(
+    (element("#currentToken") as HTMLInputElement).value,
+    "current-proof",
+  );
+  assert.equal((element("#newToken") as HTMLInputElement).value, "");
+  await click("Use link from new mailbox");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "new-proof");
+  await input("currentToken", "corrected-current-proof");
+  assert.equal(emailChangeState.value?.currentToken, "corrected-current-proof");
+});
+test("email change requires distinct mailbox proofs and a replacement request clears old credentials", async () => {
+  handler = (path) =>
+    path.endsWith("/email-change/request")
+      ? { id: "replacement-id" }
+      : { sessions: [] };
+  await mount("security", true, false, undefined, "", {
+    id: "request-id",
+    currentToken: "same-proof",
+    newToken: "",
+    pendingTokens: ["same-proof"],
+  });
+  await click("Use link from new mailbox");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "");
+  assert.match(dom.document.body.textContent!, /different mailbox/i);
+  await submit("email-change-confirm");
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/email-change/confirm")),
+    false,
+  );
+  await input("email", "replacement@example.test");
+  await submit("email-change-request");
+  assert.equal(
+    (element("#changeId") as HTMLInputElement).value,
+    "replacement-id",
+  );
+  assert.equal((element("#currentToken") as HTMLInputElement).value, "");
+  assert.equal((element("#newToken") as HTMLInputElement).value, "");
+  assert.equal(dom.document.querySelector("#email-change-link"), null);
 });
