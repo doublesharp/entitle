@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { after, afterEach, test } from "node:test";
+import { after, afterEach, beforeEach, test } from "node:test";
 import { Window } from "happy-dom";
 import type { App } from "vue";
 import type { Tenant } from "../src/db.ts";
@@ -155,6 +155,7 @@ const fetcher: typeof fetch = async (input, init = {}) => {
       applicationFeePercent: 1,
       name: "Doublesharp Entitle",
       maxUploadBytes: 26214400,
+      maxNativeUploadBytes: 104857600,
       storage: "s3",
       databaseEngines: ["SQLite", "PostgreSQL", "MySQL"],
       features: ["Tenant isolation", "Private releases"],
@@ -190,6 +191,8 @@ const fetcher: typeof fetch = async (input, init = {}) => {
     });
   if (call.path.endsWith("/account/verification/consume"))
     return Response.json({ verification: "verified-grant" });
+  if (call.path.endsWith("/account/sessions"))
+    return Response.json({ sessions: [] });
   if (call.path.endsWith("/seller/keys")) return Response.json({ keys });
   return Response.json({ ok: true });
 };
@@ -275,6 +278,7 @@ async function mount(path = "/seller", configure?: () => void) {
       : ui.mountSiteApp("#app", fetcher);
   await flush();
 }
+beforeEach(() => dom.sessionStorage.clear());
 afterEach(() => app?.unmount());
 after(() => dom.happyDOM.close());
 test("standalone dashboard hides hosted controls and discloses zero application fees", async () => {
@@ -1395,6 +1399,107 @@ function chooseFile(name = "App.zip", bytes = "PKzip") {
     new dom.Event("change", { bubbles: true }) as unknown as Event,
   );
 }
+test("native upload accepts a 50 MiB Electron asset under its separate 100 MiB limit", async () => {
+  await mount("/seller", () => {
+    getOverview = () => nativeOverview();
+  });
+  await input("#release-version", "2.0.0");
+  let reads = 0;
+  const file = el<HTMLInputElement>("#release-file");
+  Object.defineProperty(file, "files", {
+    configurable: true,
+    value: [
+      {
+        name: "App.zip",
+        size: 50 * 1048576,
+        arrayBuffer: async () => {
+          reads++;
+          return new TextEncoder().encode("small fake asset").buffer;
+        },
+      },
+    ],
+  });
+  file.dispatchEvent(
+    new dom.Event("change", { bubbles: true }) as unknown as Event,
+  );
+  await input("#release-verification-token", "release-mail-proof");
+  await submit("#release-upload");
+  assert.equal(reads, 1);
+  assert.ok(calls.find((call) => call.path.endsWith("/assets/plugin/2.0.0")));
+  assert.match(text(), /Release published/);
+});
+for (const [framework, sizeMiB, limitMiB] of [
+  ["electron", 101, 100],
+  ["wordpress", 50, 25],
+] as const) {
+  test(`${framework} upload rejects ${sizeMiB} MiB before reading bytes or consuming proof`, async () => {
+    await mount("/seller", () => {
+      if (framework !== "wordpress")
+        getOverview = () => nativeOverview(framework);
+    });
+    await input("#release-version", "2.0.0");
+    let reads = 0;
+    const file = el<HTMLInputElement>("#release-file");
+    Object.defineProperty(file, "files", {
+      configurable: true,
+      value: [
+        {
+          name: "App.zip",
+          size: sizeMiB * 1048576,
+          arrayBuffer: async () => {
+            reads++;
+            return new ArrayBuffer(0);
+          },
+        },
+      ],
+    });
+    file.dispatchEvent(
+      new dom.Event("change", { bubbles: true }) as unknown as Event,
+    );
+    await submit("#release-upload");
+    assert.match(text(), new RegExp(`no larger than ${limitMiB} MiB`));
+    assert.equal(reads, 0);
+    assert.equal(
+      calls.some((call) =>
+        /\/(?:assets|releases)\/|verification\/consume/.test(call.path),
+      ),
+      false,
+    );
+  });
+}
+test("upload guidance follows the selected product and configured native limit", async () => {
+  await mount("/seller", () => {
+    routes.set("GET /api/v1/platform/info", () =>
+      Response.json({
+        deploymentMode: "hosted",
+        applicationFeePercent: 1,
+        maxUploadBytes: 25 * 1048576,
+        maxNativeUploadBytes: 37 * 1048576,
+      }),
+    );
+    getOverview = () => ({
+      ...overview(),
+      products: [
+        ...overview().products,
+        ...nativeOverview().products.map((p) => ({ ...p, id: "native" })),
+      ],
+    });
+  });
+  assert.match(
+    el("#seller-panel-releases").textContent!,
+    /Maximum 25 MiB per asset/,
+  );
+  await input("#release-product", "native", "change");
+  assert.match(
+    el("#seller-panel-releases").textContent!,
+    /Maximum 37 MiB per asset/,
+  );
+  await input("#release-product", "p1", "change");
+  assert.match(
+    el("#seller-panel-releases").textContent!,
+    /Maximum 25 MiB per asset/,
+  );
+});
 test("native release upload sends immutable target bytes and signature metadata without WordPress fields", async () => {
   for (const [framework, target, filename] of [
     ["electron", "darwin-arm64", "App.zip"],
@@ -1592,7 +1697,7 @@ test("oversized native assets are rejected before reading or sending their bytes
     configurable: true,
     value: [
       {
-        size: 26214401,
+        size: 104857601,
         name: "App.zip",
         arrayBuffer: () => {
           throw Error("must not read oversized bytes");
@@ -1604,7 +1709,7 @@ test("oversized native assets are rejected before reading or sending their bytes
     new dom.Event("change", { bubbles: true }) as unknown as Event,
   );
   await submit("#release-upload");
-  assert.match(text(), /Choose a release asset no larger than 25 MiB/);
+  assert.match(text(), /Choose a release asset no larger than 100 MiB/);
   assert.equal(
     calls.some((c) => c.path.includes("/seller/assets/")),
     false,
@@ -1956,6 +2061,195 @@ test("verification fragments are removed and require an explicit action purpose"
   await flush();
   assert.equal(dom.location.hash, "");
   assert.match(text(), /Account security/);
+});
+for (const firstMailbox of ["current", "new"] as const) {
+  test(`email change retains ${firstMailbox}-mailbox-first links across navigation and reload until explicit confirmation`, async () => {
+    const id = "7adbbbd2-7638-4a9b-863a-5460cf9293e4";
+    const proofs = {
+      current: "current-mailbox-secret",
+      new: "new-mailbox-secret",
+    };
+    const otherMailbox = firstMailbox === "current" ? "new" : "current";
+    const link = (mailbox: "current" | "new") =>
+      `/seller?tenant=alpha#account-email-change=${id}&token=${proofs[mailbox]}`;
+    await mount(link(firstMailbox));
+    assert.equal(dom.location.hash, "");
+    assert.equal(dom.location.search, "?tenant=alpha");
+    assert.equal(el<HTMLInputElement>("#changeId").value, id);
+    assert.equal(el<HTMLDetailsElement>("#security-email").open, true);
+    assert.equal(el<HTMLInputElement>("#currentToken").value, "");
+    assert.equal(el<HTMLInputElement>("#newToken").value, "");
+    assert.equal(
+      calls.some((call) => call.init.method === "POST"),
+      false,
+    );
+    assert.ok(calls.every((call) => !call.path.includes(proofs[firstMailbox])));
+    await click(`Use link from ${firstMailbox} mailbox`);
+    assert.equal(
+      el<HTMLInputElement>(`#${firstMailbox}Token`).value,
+      proofs[firstMailbox],
+    );
+    assert.equal(
+      el<HTMLInputElement>(`#${firstMailbox}Token`).type,
+      "password",
+    );
+    assert.doesNotMatch(text(), /current-mailbox-secret|new-mailbox-secret/);
+    await click("API keys");
+    await click("Account security");
+    assert.equal(
+      el<HTMLInputElement>(`#${firstMailbox}Token`).value,
+      proofs[firstMailbox],
+    );
+
+    // A second email link can reload the app in the same signed-in tab.
+    await mount(link(otherMailbox));
+    assert.equal(dom.location.hash, "");
+    assert.equal(
+      el<HTMLInputElement>(`#${firstMailbox}Token`).value,
+      proofs[firstMailbox],
+    );
+    await click(`Use link from ${otherMailbox} mailbox`);
+    assert.equal(el<HTMLInputElement>("#currentToken").value, proofs.current);
+    assert.equal(el<HTMLInputElement>("#newToken").value, proofs.new);
+    assert.equal(
+      calls.some((call) => call.init.method === "POST"),
+      false,
+    );
+    routes.set("POST /api/v1/platform/account/email-change/confirm", (call) => {
+      assert.equal(dom.location.hash, "");
+      assert.deepEqual(call.body, {
+        id,
+        currentToken: proofs.current,
+        newToken: proofs.new,
+      });
+      assert.equal(
+        new Headers(call.init.headers).get("X-CSRF-Token"),
+        "seller-csrf",
+      );
+      signed = false;
+      return Response.json({ ok: true, signInRequired: true });
+    });
+    await submit("#email-change-confirm");
+    assert.equal(
+      calls.filter((call) => call.path.endsWith("/email-change/confirm"))
+        .length,
+      1,
+    );
+    assert.match(text(), /Sign in to sell/);
+    assert.equal(dom.sessionStorage.length, 0);
+  });
+}
+for (const firstMailbox of ["current", "new"] as const) {
+  test(`email change binds mailbox selection to the latest link after opening ${firstMailbox} first without assigning it`, async () => {
+    const proofs = { current: "current-proof", new: "new-proof" };
+    const secondMailbox = firstMailbox === "current" ? "new" : "current";
+    const link = (mailbox: "current" | "new") =>
+      `/seller#account-email-change=request-id&token=${proofs[mailbox]}`;
+    await mount(link(firstMailbox));
+    await mount(link(secondMailbox));
+    assert.equal(dom.location.hash, "");
+    await click(`Use link from ${secondMailbox} mailbox`);
+    assert.equal(
+      el<HTMLInputElement>(`#${secondMailbox}Token`).value,
+      proofs[secondMailbox],
+    );
+    assert.equal(dom.document.querySelector("#email-change-link"), null);
+    dom.location.hash = link(firstMailbox).split("#")[1]!;
+    dom.dispatchEvent(new dom.Event("hashchange"));
+    await flush();
+    await click(`Use link from ${firstMailbox} mailbox`);
+    routes.set("POST /api/v1/platform/account/email-change/confirm", (call) => {
+      assert.deepEqual(call.body, {
+        id: "request-id",
+        currentToken: proofs.current,
+        newToken: proofs.new,
+      });
+      signed = false;
+      return Response.json({ ok: true, signInRequired: true });
+    });
+    await submit("#email-change-confirm");
+    assert.equal(
+      calls.filter((call) => call.path.endsWith("/email-change/confirm"))
+        .length,
+      1,
+    );
+    assert.match(text(), /Sign in to sell/);
+  });
+}
+test("email change rejects malformed fragments without leaking or replacing a retained mailbox proof", async () => {
+  await mount("/seller#account-email-change=request-id&token=current-proof");
+  await click("Use link from current mailbox");
+  for (const fragment of [
+    "account-email-change=request-id",
+    "account-email-change=&token=secret",
+    "account-email-change=request-id&token=",
+    "account-email-change=request-id&token=one&token=two",
+    "account-email-change=one&account-email-change=two&token=secret",
+    `account-email-change=request-id&token=${"x".repeat(201)}`,
+    "account-email-change=request-id&token=%3Cscript%3E",
+  ]) {
+    dom.location.hash = `#${fragment}`;
+    dom.dispatchEvent(new dom.Event("hashchange"));
+    await flush();
+    assert.equal(dom.location.hash, "");
+    assert.match(text(), /email.change link.*invalid/i);
+    assert.equal(el<HTMLInputElement>("#currentToken").value, "current-proof");
+    assert.equal(el<HTMLInputElement>("#newToken").value, "");
+    assert.doesNotMatch(text(), /current-proof|<script>/);
+  }
+  await submit("#email-change-confirm");
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/email-change/confirm")),
+    false,
+  );
+});
+test("email change deduplicates links and resets proofs for a different request", async () => {
+  await mount("/seller#account-email-change=first-request&token=current-proof");
+  await click("Use link from current mailbox");
+  dom.location.hash = "#account-email-change=first-request&token=current-proof";
+  dom.dispatchEvent(new dom.Event("hashchange"));
+  await flush();
+  assert.equal(dom.document.querySelector("#email-change-link"), null);
+  assert.equal(el<HTMLInputElement>("#newToken").value, "");
+  dom.location.hash =
+    "#account-email-change=second-request&token=new-request-proof";
+  dom.dispatchEvent(new dom.Event("hashchange"));
+  await flush();
+  assert.equal(el<HTMLInputElement>("#changeId").value, "second-request");
+  assert.equal(el<HTMLInputElement>("#currentToken").value, "");
+  assert.equal(el<HTMLInputElement>("#newToken").value, "");
+  await click("Use link from new mailbox");
+  await click("Sign out");
+  assert.equal(dom.sessionStorage.length, 0);
+});
+test("email change restores only unexpired proofs belonging to the current seller", async () => {
+  const draft = {
+    id: "request-id",
+    currentToken: "current-proof",
+    newToken: "",
+    pendingTokens: [],
+  };
+  for (const stored of [
+    "not-json",
+    JSON.stringify({ sellerId: "seller", expiresAt: Date.now() - 1, draft }),
+    JSON.stringify({
+      sellerId: "another-seller",
+      expiresAt: Date.now() + 900000,
+      draft,
+    }),
+    JSON.stringify({
+      sellerId: "seller",
+      expiresAt: Date.now() + 900000,
+      draft: { ...draft, pendingTokens: ["<bad>"] },
+    }),
+  ]) {
+    dom.sessionStorage.setItem("entitle:email-change", stored);
+    await mount("/seller");
+    await click("Account security");
+    assert.equal(el<HTMLInputElement>("#changeId").value, "");
+    assert.equal(el<HTMLInputElement>("#currentToken").value, "");
+    assert.equal(dom.sessionStorage.length, 0);
+  }
 });
 test("security survives restricted workspace access and revoking the current session clears the seller", async () => {
   await mount("/seller", () => {
