@@ -7,7 +7,7 @@ import type { Config } from "./config.ts";
 import { hash, random, csrf, equal,seal,unseal } from "./crypto.ts";
 import { check } from "./errors.ts";
 import { enqueueEmail } from "./email.ts";
-import { site } from "./site.ts";
+import { signInEmail } from "./sign-in-email.ts";
 export class Auth {
   db: DB;
   config: Config;
@@ -53,11 +53,11 @@ export class Auth {
         c.id,
         null,
         "login",
-        {
-          to: c.email,
-          subject: `Sign in to ${site.name}`,
-          text: `Open ${appUrl(this.config, `/t/${this.tenant.slug}#login=${token}`)}\n\nConfirm sign-in in your browser. This single-use link expires in 15 minutes. If you did not request it, ignore this message.`,
-        },
+        signInEmail(
+          c.email,
+          appUrl(this.config, `/t/${this.tenant.slug}#login=${token}`),
+          "customer",
+        ),
         this.tenant.id,
       );
     });
