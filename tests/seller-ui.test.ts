@@ -714,6 +714,40 @@ test("seller overview displays real private metrics with exact separate currenci
       .every((c) => c.path.startsWith("/api/v1/tenants/alpha/seller/")),
   );
 });
+test("authenticated sellers discard emailed sign-in links on arrival and hash changes", async () => {
+  await mount("/seller#seller-login=old-secret");
+  assert.equal(dom.location.hash, "");
+  assert.match(text(), /seller@example.test/);
+  assert.doesNotMatch(text(), /Confirm seller sign in/);
+  dom.location.hash = "#seller-login=another-secret";
+  dom.dispatchEvent(new dom.HashChangeEvent("hashchange"));
+  await flush();
+  assert.equal(dom.location.hash, "");
+  assert.doesNotMatch(text(), /Confirm seller sign in/);
+  assert.equal(calls.some((c) => c.path.endsWith("/auth/consume")), false);
+  await click("Sign out");
+  assert.match(text(), /Sign in to sell/);
+  assert.doesNotMatch(text(), /Confirm seller sign in/);
+});
+
+test("seller sign-in confirmation waits for the initial session lookup", async () => {
+  let resolve!: (value: Response) => void;
+  const pending = new Promise<Response>((done) => {
+    resolve = done;
+  });
+  await mount("/seller#seller-login=pending-secret", () => {
+    signed = false;
+    routes.set("GET /api/v1/platform/me", () => pending);
+  });
+  assert.equal(dom.location.hash, "");
+  assert.match(text(), /Loading seller session/);
+  assert.doesNotMatch(text(), /Confirm seller sign in/);
+  resolve(denied());
+  await flush();
+  assert.equal(button("Confirm seller sign in").disabled, false);
+  assert.equal(calls.some((c) => c.path.endsWith("/auth/consume")), false);
+});
+
 test("seller email token clears before requests and requires explicit confirmation; cancel and hash changes work", async () => {
   await mount("/seller#seller-login=first-secret", () => {
     signed = false;
@@ -735,6 +769,7 @@ test("seller email token clears before requests and requires explicit confirmati
   await flush();
   await click("Confirm seller sign in");
   assert.match(text(), /seller@example.test/);
+  assert.doesNotMatch(text(), /Confirm seller sign in/);
   await click("Sign out");
   assert.match(text(), /Sign in to sell/);
   await input("#seller-email", " person@example.test ");
@@ -1248,22 +1283,22 @@ test("missing or cleared upload files never send publication bytes", async () =>
   );
 });
 
-test("an in-flight seller request cannot be duplicated and a failed sign-in retains the owner session", async () => {
+test("an in-flight seller request cannot be duplicated and a failed sign-in stays signed out", async () => {
   let resolve!: (value: Response) => void;
   const pending = new Promise<Response>((done) => {
     resolve = done;
   });
-  await mount("/seller#seller-login=invalid", () =>
-    routes.set("POST /api/v1/platform/auth/request", () => pending),
-  );
+  await mount("/seller#seller-login=invalid", () => {
+    signed = false;
+    routes.set("POST /api/v1/platform/auth/request", () => pending);
+  });
   routes.set("POST /api/v1/platform/auth/consume", () =>
     denied(401, "Invalid link."),
   );
   await click("Confirm seller sign in");
-  assert.match(text(), /seller@example.test/);
+  assert.match(text(), /Sign in to sell/);
   assert.match(text(), /Invalid link/);
   await click("Cancel sign in");
-  await click("Sign out");
   await input("#seller-email", "seller@example.test");
   const form = el("#seller-login");
   const submitEvent = () =>
