@@ -5,6 +5,8 @@ import { hash, random, seal, unseal } from "./crypto.ts";
 import { check } from "./errors.ts";
 import { enqueueEmail } from "./email.ts";
 import { site } from "./site.ts";
+import { lock } from "./db.ts";
+import { z } from "zod";
 import { activationKind, validateFramework, validateFrameworkConfig } from "./frameworks.ts";
 export function normalizeSite(input: string) {
   const url = new URL(input);
@@ -25,6 +27,7 @@ export async function effectiveLicense(
   tenantId: string,
   now: number,
 ): Promise<License> {
+  if (l.provenance === "complimentary") return l;
   // Overlapping paid grants retain the largest purchased allowance through
   // its paid period. In a gap, retain the most recent plan that has begun,
   // rather than a cached projection of a future plan from reconciliation.
@@ -49,6 +52,18 @@ export async function effectiveLicense(
     ? { ...l, plan_id: grant.id, site_allowance: grant.site_allowance }
     : l;
 }
+export function entitlementEnd(l: Pick<License, "provenance" | "paid_through" | "expires_at">) {
+  return Number(l.provenance === "complimentary" ? l.expires_at ?? 0 : l.paid_through);
+}
+export const complimentaryInput = z.object({
+  email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
+  productId: z.string().min(1).max(64),
+  siteAllowance: z.number().int().min(1).max(100000),
+  expiresAt: z.number().int().positive().max(8640000000000000),
+  note: z.string().trim().max(2000).optional(),
+  requestId: z.string().uuid(),
+  confirm: z.literal(true),
+}).strict();
 export class Licenses {
   db: DB;
   secret: string;
@@ -71,7 +86,7 @@ export class Licenses {
   entitled(l: License) {
     return (
       l.tenant_id === this.tenant.id &&
-      Number(l.paid_through) > this.now() &&
+      entitlementEnd(l) > this.now() &&
       !l.revoked &&
       !l.refund_revoked &&
       !l.suspended
@@ -79,6 +94,47 @@ export class Licenses {
   }
   async effective(l: License, tx: Tx = this.db): Promise<License> {
     return effectiveLicense(l,tx,this.tenant.id,this.now());
+  }
+  async issueComplimentary(
+    input: z.infer<typeof complimentaryInput>,
+    actor: { type: "seller" | "api_key"; id: string },
+  ) {
+    const request = complimentaryInput.parse(input);
+    const requestHash = hash(JSON.stringify([request.email, request.productId, request.siteAllowance, request.expiresAt, request.note || null]));
+    return this.db.transaction(async tx => {
+      // Match customer recovery/closure lock order, and serialize with Stripe's
+      // customer mapping. Retries never generate another key or outbox job.
+      await lock(tx, "auth", this.tenant.id);
+      await lock(tx, "billing", this.tenant.id);
+      const existing = await tx<License>("licenses").where({ tenant_id: this.tenant.id, complimentary_request_id: request.requestId }).first();
+      if (existing) {
+        check(existing.complimentary_request_hash === requestHash, 409, "idempotency_conflict", "This request ID was already used with different license details.");
+        return { id: existing.id, customerId: existing.customer_id, emailQueued: true };
+      }
+      check(request.expiresAt > this.now(), 400, "invalid_expiration", "Choose a future expiration date.");
+      const product = await tx("products").where({ tenant_id: this.tenant.id, id: request.productId }).first();
+      check(product, 404, "not_found", "Product not found.");
+      let customer = await tx<Customer>("customers").where({ tenant_id: this.tenant.id, email: request.email }).first();
+      if (!customer) {
+        customer = { tenant_id: this.tenant.id, id: randomUUID(), email: request.email, stripe_id: null };
+        await tx("customers").insert(customer);
+      }
+      const key = `DE-${random()}`, now = this.now();
+      const license: License = {
+        tenant_id: this.tenant.id, id: randomUUID(), customer_id: customer.id, product_id: product.id,
+        plan_id: null, site_allowance: request.siteAllowance, paid_through: 0, billing_status: "complimentary",
+        subscription_id: null, provenance: "complimentary", expires_at: request.expiresAt,
+        complimentary_request_id: request.requestId, complimentary_request_hash: requestHash,
+        issued_by: actor.id, issued_at: now, internal_note: request.note || null,
+        key_hash: hash(key), revoked: 0, refund_revoked: 0, suspended: 0, lock_version: 0,
+      };
+      await tx("licenses").insert(license);
+      await this.keyEmail(tx, license, key);
+      await tx("audit_events").insert({ id: randomUUID(), tenant_id: this.tenant.id, actor_type: actor.type, actor_id: actor.id,
+        action: "license.complimentary_issued", details: JSON.stringify({ license_id: license.id, product_id: product.id }), created_at: now });
+      await recordBusinessEvent(tx, this.tenant.id, "license.created", license.id, "created", now);
+      return { id: license.id, customerId: customer.id, emailQueued: true };
+    });
   }
   async keyEmail(tx: Tx, l: License, key: string) {
     const c = await tx<Customer>("customers")
@@ -95,7 +151,7 @@ export class Licenses {
       {
         to: c.email,
         subject: `Your ${site.name} license key`,
-        text: `Your license key is ${key}\n\nSave this key securely. If it is lost, request an email login link on the customer website and replace it. Key replacement revokes existing activation tokens; reconnect your sites with the new key. Expiration and service outages never disable installed functionality.`,
+        text: `Your license key is ${key}\n\n${l.provenance === "complimentary" ? `This is a complimentary license. Access to new activations, downloads and updates expires at ${new Date(entitlementEnd(l)).toISOString()}. You will not be charged automatically or enrolled in a subscription.\n\n` : ""}Save this key securely. If it is lost, request an email login link on the customer website and replace it. Key replacement revokes existing activation tokens; reconnect your sites with the new key. Expiration and service outages never disable installed functionality.`,
       },
       this.tenant.id,
     );
@@ -190,7 +246,7 @@ export class Licenses {
       licenseId: l.id,
       installationId: i.installation_id,
       siteAllowance: l.site_allowance,
-      paidThrough: Number(l.paid_through),
+      paidThrough: entitlementEnd(l),
     };
   }
   async resolve(token: string, tx: Tx = this.db) {
@@ -213,7 +269,7 @@ export class Licenses {
       licenseId: l.id,
       installationId: i.installation_id,
       siteAllowance: l.site_allowance,
-      paidThrough: Number(l.paid_through),
+      paidThrough: entitlementEnd(l),
       entitled: this.entitled(l),
       billingStatus: l.billing_status,
     };

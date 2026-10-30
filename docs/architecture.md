@@ -40,6 +40,24 @@ Email links are single-use and browser-bound. Sessions are server-side;
 protected mutations require same-origin/CSRF checks. Sensitive actions consume
 purpose-specific proofs. [Seller guide](seller-guide.md) covers these workflows.
 
+## Complimentary entitlement
+
+Complimentary licenses are ordinary license rows with explicit provenance, an
+expiration, allowance and issuance actor/time. Their plan/subscription references
+are null and paid-through remains zero. Issuance serializes customer mapping with
+billing and commits customer reuse/creation, the hashed key, encrypted outbox,
+audit and business event together. A workspace-scoped request UUID and payload
+digest make ambiguous retries safe. The raw key appears only in encrypted email
+payloads and the existing authenticated key replacement response.
+
+The common entitlement check reads complimentary expiry or paid-through, then
+applies the same restrictions. Paid grant projection and Stripe reconciliation
+cannot alter complimentary allowances or entitlement. Invoice metrics remain
+provider-backed; complimentary licenses are never reported as revenue. Production
+can run with primary Stripe settings omitted; provider jobs pause while email,
+activation and private distribution continue. Installed software stays usable
+after expiry. No client changes or automatic subscription enrollment are involved.
+
 ## Checkout and billing
 
 Buyer checkout uses server-controlled product/price mappings in the publisher's

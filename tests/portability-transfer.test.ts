@@ -33,8 +33,7 @@ const sourceSecret = "1".repeat(64),
   passphrase = "user held transfer phrase";
 async function fixture(t: TestContext) {
   await access("/Volumes/Scratch");
-  const temporary =
-    process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp";
+  const temporary = process.env.TMPDIR ?? "/Volumes/Scratch/entitle/tmp";
   await mkdir(temporary, { recursive: true });
   const root = await mkdtemp(join(temporary, "portability-"));
   const source = await isolatedDatabase(`sqlite:${root}/source.sqlite`);
@@ -338,6 +337,165 @@ test("tenant export imports paid rights and encrypted token/key email into fresh
   assert.equal((await f.destination("emails").first()).state, "pending");
   assert.equal((await f.destination("work").first()).state, "canceled");
   assert.deepEqual(await readdir(`${f.root}/import-work`), []);
+});
+
+test("complimentary licenses transfer without fabricating subscription reconciliation", async (t) => {
+  const f = await fixture(t);
+  const id = randomUUID(),
+    request = randomUUID(),
+    expires = Date.now() + 86400000;
+  await f.db("licenses").insert({
+    tenant_id: f.tenant.id,
+    id,
+    customer_id: f.customer,
+    product_id: f.product,
+    plan_id: null,
+    subscription_id: null,
+    site_allowance: 2,
+    paid_through: 0,
+    provenance: "complimentary",
+    expires_at: expires,
+    billing_status: "complimentary",
+    key_hash: hash("complimentary-key"),
+    issued_by: "owner",
+    issued_at: Date.now(),
+    complimentary_request_id: request,
+    complimentary_request_hash: hash("request"),
+    internal_note: "Private invitation",
+  });
+  const bundle = await f.bundle();
+  const imported = await importPortability(f.options(bundle.directory));
+  assert.deepEqual(imported.subscriptionIds, ["sub_paid"]);
+  const license = await f.destination("licenses").where({ id }).first();
+  assert.equal(license.provenance, "complimentary");
+  assert.equal(license.plan_id, null);
+  assert.equal(license.subscription_id, null);
+  assert.equal(Number(license.expires_at), expires);
+  assert.equal(license.complimentary_request_id, request);
+  assert.equal(license.internal_note, "Private invitation");
+  await completePortabilityImport({
+    db: f.destination,
+    secret: destinationSecret,
+    expectedStripeAccountId: "acct_merchant",
+    reconcile: async (required) => {
+      assert.deepEqual(required.subscriptionIds, ["sub_paid"]);
+      await f
+        .destination("billing_events")
+        .whereNull("processed_at")
+        .update({ processed_at: Date.now() });
+    },
+  });
+  const tenant = await f
+    .destination("tenants")
+    .where({ id: "primary" })
+    .first();
+  const licensing = new Licenses(f.destination, destinationSecret, [], tenant);
+  const activation = await licensing.activate(
+    "complimentary-key",
+    "pilot-installation",
+    "https://pilot.example.test",
+    "portable-product",
+  );
+  assert.equal(activation.siteAllowance, 2);
+  assert.equal((await licensing.status(activation.token)).entitled, true);
+});
+
+test("portability rejects complimentary rows with payment bindings, paid grants or incomplete entitlement before destination writes", async (t) => {
+  const f = await fixture(t),
+    bundle = await f.bundle();
+  const file = join(bundle.directory, "manifest.entitle"),
+    original = await readFile(file);
+  const changes: Array<
+    (
+      row: Record<string, unknown>,
+      tables: Record<string, Array<Record<string, unknown>>>,
+    ) => void
+  > = [
+    (row) => {
+      row.plan_id = f.plan;
+    },
+    (row) => {
+      row.subscription_id = "sub_unwanted";
+    },
+    (row) => {
+      row.paid_through = Date.now();
+    },
+    (row) => {
+      row.expires_at = null;
+    },
+    (row) => {
+      row.expires_at = 1;
+    },
+    (row) => {
+      row.complimentary_request_id = null;
+    },
+    (row) => {
+      row.issued_by = null;
+    },
+    (_row, tables) => {
+      tables.grants!.push({
+        ...tables.grants![0],
+        id: "comp-paid-grant",
+        license_id: f.license,
+      });
+    },
+  ];
+  for (const change of changes) {
+    await writeFile(file, original);
+    await rewriteManifest(bundle.directory, (manifest) => {
+      const tables = manifest.tables as Record<
+        string,
+        Array<Record<string, unknown>>
+      >;
+      const row = tables.licenses![0]!;
+      Object.assign(row, {
+        provenance: "complimentary",
+        plan_id: null,
+        subscription_id: null,
+        paid_through: 0,
+        expires_at: Date.now() + 86400000,
+        billing_status: "complimentary",
+        issued_by: "owner",
+        issued_at: Date.now(),
+        complimentary_request_id: randomUUID(),
+        complimentary_request_hash: hash("request"),
+      });
+      const paidGrant = tables.grants![0]!;
+      tables.grants = [];
+      if (change === changes.at(-1)) tables.grants.push(paidGrant);
+      change(row, tables);
+    });
+    await assert.rejects(importPortability(f.options(bundle.directory)), {
+      code: "invalid_bundle",
+    });
+    assert.equal((await f.destination("licenses")).length, 0);
+  }
+});
+
+test("legacy paid manifests acquire explicit paid provenance on import", async (t) => {
+  const f = await fixture(t),
+    bundle = await f.bundle();
+  await rewriteManifest(bundle.directory, (manifest) => {
+    const tables = manifest.tables as Record<
+      string,
+      Array<Record<string, unknown>>
+    >;
+    for (const license of tables.licenses!)
+      for (const field of [
+        "provenance",
+        "expires_at",
+        "complimentary_request_id",
+        "complimentary_request_hash",
+        "issued_by",
+        "issued_at",
+        "internal_note",
+      ])
+        delete license[field];
+  });
+  await importPortability(f.options(bundle.directory));
+  const license = await f.destination("licenses").first();
+  assert.equal(license.provenance, "paid");
+  assert.equal(license.expires_at, null);
 });
 
 test("bad passphrase, corrupt ciphertext, foreign tenant handle and merchant mismatch fail before import", async (t) => {

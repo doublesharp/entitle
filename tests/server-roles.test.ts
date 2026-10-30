@@ -309,7 +309,7 @@ test("API/worker refuse missing, pending, unknown or duplicate migration history
         await migrate(db);
         if (state === "pending")
           await db("knex_migrations")
-            .where({ name: "013_platform_price_history" })
+            .where({ name: "014_complimentary_licenses" })
             .delete();
         else
           await db("knex_migrations").insert({
@@ -376,7 +376,7 @@ test("explicit migrate dispatch applies once, closes DB, and never builds/listen
   assert.equal(ctl.signals.listenerCount("SIGTERM"), 0);
   const inspect = createDb(c.databaseUrl);
   try {
-    assert.equal((await inspect("knex_migrations")).length, 13);
+    assert.equal((await inspect("knex_migrations")).length, 14);
   } finally {
     await inspect.destroy();
   }
@@ -580,7 +580,7 @@ test("start launcher dispatches migrate through the runtime entry", async () => 
     assert.doesNotMatch(output, /listening/i);
     const db = createDb(`sqlite:${data}/db.sqlite`);
     try {
-      assert.equal((await db("knex_migrations")).length, 13);
+      assert.equal((await db("knex_migrations")).length, 14);
     } finally {
       await db.destroy();
     }

@@ -1,13 +1,13 @@
 import type { DB, License, Tenant } from "./db.ts";
 import { check } from "./errors.ts";
-import { effectiveLicense } from "./licensing.ts";
+import { effectiveLicense, entitlementEnd } from "./licensing.ts";
 
 export async function tenantMetrics(db: DB, tenant: Tenant, now = Date.now()) {
   const licenses = await db<License>("licenses").where({ tenant_id: tenant.id });
   const installations = await db("installations").where({ tenant_id: tenant.id, active: 1 });
   const releases = await db("releases").where({ tenant_id: tenant.id });
   const reservations = await db("upload_reservations").where({ tenant_id: tenant.id });
-  const entitled = licenses.filter(l => Number(l.paid_through) > now && !l.revoked && !l.refund_revoked && !l.suspended);
+  const entitled = licenses.filter(l => entitlementEnd(l) > now && !l.revoked && !l.refund_revoked && !l.suspended);
   const entitledIds = new Set(entitled.map(l => l.id));
   const used = installations.filter(i => !i.exempt && entitledIds.has(i.license_id)).length;
   let allowance=0;
@@ -25,7 +25,7 @@ export async function tenantMetrics(db: DB, tenant: Tenant, now = Date.now()) {
   }
   return {
     licenses: {issued:licenses.length,entitled:entitled.length,
-      expired:licenses.filter(l=>Number(l.paid_through)<=now).length,
+      expired:licenses.filter(l=>entitlementEnd(l)<=now).length,
       revoked:licenses.filter(l=>l.revoked || l.refund_revoked).length,
       suspended:licenses.filter(l=>l.suspended).length},
     installations: {active:installations.length,productionActive:installations.filter(i=>!i.exempt).length,developmentActive:installations.filter(i=>i.exempt).length},

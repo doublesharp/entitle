@@ -131,6 +131,7 @@ export class Billing {
             subscription_id: subscriptionId,
           })
           .first();
+        check(!l || l.provenance !== "complimentary", 409, "billing_provenance_conflict", "Stripe cannot reconcile complimentary entitlement.");
         if (!l && !paid.length) return true;
         for (const invoice of s.invoices ?? []) {
           check(

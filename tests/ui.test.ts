@@ -219,6 +219,30 @@ after(async () => {
   await dom.happyDOM.close();
 });
 
+test("complimentary customer licenses show expiry without offering unavailable billing", async () => {
+  await mount((fixture) => {
+    fixture.currentAccount = {
+      ...account([
+        license({
+          provenance: "complimentary",
+          expires_at: Date.UTC(2030, 5, 4),
+          paid_through: 0,
+          billing_status: "complimentary",
+          plan_name: "Complimentary",
+        }),
+      ]),
+      billingAvailable: false,
+    };
+    fixture.on("GET", "/catalog", () =>
+      Response.json({ products: [], billingAvailable: false }),
+    );
+  });
+  await flush();
+  assert.match(text(), /Complimentary/);
+  assert.match(text(), /Expires/);
+  assert.doesNotMatch(text(), /Manage billing/);
+  assert.match(text(), /Paid checkout is unavailable/);
+});
 test("Vue mounts and exposes genuine account and catalog loading states", async () => {
   const me = deferred<Response>();
   const catalog = deferred<Response>();

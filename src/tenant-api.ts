@@ -7,6 +7,7 @@ import type { Licenses } from "./licensing.ts";
 import type { Artifacts } from "./artifacts.ts";
 import type { Releases } from "./releases.ts";
 import type { Billing } from "./billing.ts";
+import { stripeConfigured } from "./config.ts";
 import type { StripeBilling } from "./stripe.ts";
 import { Auth, bearer } from "./auth.ts";
 import { AppError, check } from "./errors.ts";
@@ -46,7 +47,7 @@ export async function buyerRoutes(
   ) => void,
 ) {
   api.get("/catalog", async (req) => {
-    const { db, tenant } = context(req);
+    const { db, tenant, config } = context(req);
     const products = await db("products")
       .where({ tenant_id: tenant.id })
       .select("id", "name", "slug", "framework", "framework_config");
@@ -65,9 +66,10 @@ export async function buyerRoutes(
         site_allowance,
       }));
     }
-    return { tenant: { slug: tenant.slug, name: tenant.name }, products };
+    return { tenant: { slug: tenant.slug, name: tenant.name }, products, billingAvailable: config.localBilling || (stripeConfigured(config) && (config.deploymentMode === "standalone" || tenant.stripe_status === "connected")) };
   });
   api.post("/checkout", { config: apiLimit(10) }, async (req, reply) => {
+    check(context(req).config.localBilling || stripeConfigured(context(req).config), 503, "billing_unavailable", "Stripe billing is not configured.");
     const { db, tenant, auth, stripe } = context(req);
     const input = z
       .object({
@@ -268,7 +270,7 @@ export async function buyerRoutes(
     return { ok: true };
   });
   api.get("/me", async (req) => {
-    const { db, auth, tenant, licensing } = context(req);
+    const { db, auth, tenant, licensing, config } = context(req);
     const { customer, csrfToken } = await auth.customer(req, false);
     const ownedLicenses = () =>
       db<License>("licenses").where({
@@ -280,6 +282,7 @@ export async function buyerRoutes(
       return {
         customer: { id: customer.id, email: customer.email },
         csrfToken,
+        billingAvailable: false,
         licenses: [],
       };
     const licenses = [];
@@ -348,14 +351,16 @@ export async function buyerRoutes(
     }
     for (const l of effectiveRows) {
       const product = products.get(l.product_id)!;
-      const plan = plans.get(l.plan_id)!;
+      const plan = l.plan_id ? plans.get(l.plan_id) : undefined;
       licenses.push({
         id: l.id,
         product_id: l.product_id,
         product_name: product.name,
         framework: product.framework,
         frameworkConfig: JSON.parse(product.framework_config),
-        plan_name: plan.name,
+        plan_name: plan?.name ?? "Complimentary",
+        provenance: l.provenance ?? "paid",
+        expires_at: l.expires_at == null ? null : Number(l.expires_at),
         site_allowance: l.site_allowance,
         paid_through: Number(l.paid_through),
         billing_status: l.billing_status,
@@ -375,6 +380,7 @@ export async function buyerRoutes(
     }
     return {
       customer: { id: customer.id, email: customer.email },
+      billingAvailable: !!customer.stripe_id && (config.localBilling || stripeConfigured(config)),
       csrfToken,
       licenses,
     };
@@ -427,6 +433,7 @@ export async function buyerRoutes(
     empty.parse(req.body);
     const { auth, stripe } = context(req);
     const { customer } = await auth.customer(req, true);
+    check(context(req).config.localBilling || stripeConfigured(context(req).config), 503, "billing_unavailable", "Stripe billing is not configured.");
     check(
       customer.stripe_id,
       409,

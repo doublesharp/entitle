@@ -281,6 +281,205 @@ async function mount(path = "/seller", configure?: () => void) {
 beforeEach(() => dom.sessionStorage.clear());
 afterEach(() => app?.unmount());
 after(() => dom.happyDOM.close());
+test("complimentary issuance confirms the frozen request and reuses its ID after an ambiguous failure", async () => {
+  let attempts = 0;
+  await mount("/seller", () => {
+    routes.set(
+      "POST /api/v1/tenants/alpha/seller/licenses/complimentary",
+      () => {
+        attempts++;
+        return attempts === 1
+          ? denied(503, "Try this request again.")
+          : Response.json({
+              id: "comp-one",
+              customerId: "buyer",
+              emailQueued: true,
+            });
+      },
+    );
+  });
+  await click("Licenses");
+  await input("#complimentary-email", "pilot@example.test");
+  await input("#complimentary-allowance", "2");
+  await input("#complimentary-expiry", "2030-06-01T12:00");
+  await input("#complimentary-note", "Invited pilot");
+  await submit("#complimentary-issue");
+  assert.equal(attempts, 0);
+  assert.match(el("dialog").textContent || "", /pilot@example.test/);
+  await click("Confirm complimentary license");
+  assert.equal(attempts, 1);
+  assert.match(text(), /Try this request again/);
+  await submit("#complimentary-issue");
+  await click("Confirm complimentary license");
+  const submissions = calls.filter((call) =>
+    call.path.endsWith("/licenses/complimentary"),
+  );
+  assert.deepEqual(submissions[1]!.body, submissions[0]!.body);
+  const body = submissions[0]!.body as Record<string, unknown>;
+  assert.equal(body.confirm, true);
+  assert.equal(body.productId, "p1");
+  assert.equal(body.siteAllowance, 2);
+  assert.equal(body.note, "Invited pilot");
+  assert.match(String(body.requestId), /^[a-f0-9-]{36}$/i);
+  assert.equal(
+    new Headers(submissions[0]!.init.headers).get("x-csrf-token"),
+    "seller-csrf",
+  );
+  assert.match(text(), /License issued.*email queued/i);
+});
+test("Stripe-free workspaces can create products and clearly mark complimentary expiry", async () => {
+  await mount("/seller", () => {
+    getOverview = () => ({
+      ...overview(),
+      billingAvailable: false,
+      licenses: [
+        {
+          ...overview().licenses[0]!,
+          provenance: "complimentary",
+          expires_at: 1900000000000,
+          paid_through: 0,
+          plan_name: "Complimentary",
+          billing_status: "complimentary",
+        },
+      ],
+    });
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      Response.json({ prices: [], localMode: false }),
+    );
+  });
+  await click("Products");
+  assert.equal(
+    el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
+    false,
+  );
+  await input("#product-name", "Pilot product");
+  await input("#product-slug", "pilot-product");
+  await input("#plugin-basename", "pilot-product/pilot.php");
+  await submit("#product-create");
+  assert.deepEqual(
+    (
+      calls.find((call) => call.path.endsWith("/seller/products"))!.body as {
+        plans: unknown[];
+      }
+    ).plans,
+    [],
+  );
+  await click("Licenses");
+  assert.match(el("#seller-panel-licenses").textContent || "", /Complimentary/);
+  assert.match(el("#seller-panel-licenses").textContent || "", /Expires/);
+  assert.match(text(), /Paid checkout and billing are unavailable/);
+});
+test("a configured platform does not require a connected seller account or price to create a pilot product", async () => {
+  await mount("/seller", () => {
+    getOverview = () => ({ ...overview(), billingAvailable: true });
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      denied(409, "Connect a Stripe account first."),
+    );
+  });
+  await click("Products");
+  assert.equal(
+    el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
+    false,
+  );
+  assert.equal(el<HTMLInputElement>("#include-paid-plan").checked, false);
+  assert.equal(dom.document.querySelector("#price-id"), null);
+  await input("#product-name", "Pilot product");
+  await input("#product-slug", "pilot-product");
+  await input("#plugin-basename", "pilot-product/pilot.php");
+  await submit("#product-create");
+  assert.deepEqual(
+    (
+      calls.find((call) => call.path.endsWith("/seller/products"))!.body as {
+        plans: unknown[];
+      }
+    ).plans,
+    [],
+  );
+});
+test("paid plan setup is optional with configured prices and with an empty price catalog", async () => {
+  await mount("/seller");
+  await click("Products");
+  assert.equal(el<HTMLInputElement>("#include-paid-plan").checked, true);
+  el<HTMLInputElement>("#include-paid-plan").click();
+  await flush();
+  assert.equal(dom.document.querySelector("#price-id"), null);
+  await submit("#product-create");
+  assert.deepEqual(
+    (
+      calls.find((call) => call.path.endsWith("/seller/products"))!.body as {
+        plans: unknown[];
+      }
+    ).plans,
+    [],
+  );
+
+  await mount("/seller", () => {
+    getOverview = () => ({ ...overview(), billingAvailable: true });
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      Response.json({ prices: [], localMode: false }),
+    );
+  });
+  await click("Products");
+  assert.equal(el<HTMLInputElement>("#include-paid-plan").checked, false);
+  assert.equal(
+    el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
+    false,
+  );
+  await submit("#product-create");
+  assert.deepEqual(
+    (
+      calls.find((call) => call.path.endsWith("/seller/products"))!.body as {
+        plans: unknown[];
+      }
+    ).plans,
+    [],
+  );
+});
+test("complimentary confirmation can be canceled and pending issuance blocks duplicate submissions", async () => {
+  let finish!: (response: Response) => void;
+  await mount("/seller", () => {
+    routes.set(
+      "POST /api/v1/tenants/alpha/seller/licenses/complimentary",
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+  });
+  await click("Licenses");
+  await input("#complimentary-email", "pilot@example.test");
+  await input("#complimentary-expiry", "2030-06-01T12:00");
+  await submit("#complimentary-issue");
+  await click("Cancel");
+  assert.equal(
+    calls.filter((call) => call.path.endsWith("/licenses/complimentary"))
+      .length,
+    0,
+  );
+  await submit("#complimentary-issue");
+  await click("Confirm complimentary license");
+  assert.equal(
+    el<HTMLButtonElement>('#complimentary-issue button[type="submit"]')
+      .disabled,
+    true,
+  );
+  await submit("#complimentary-issue");
+  assert.equal(
+    calls.filter((call) => call.path.endsWith("/licenses/complimentary"))
+      .length,
+    1,
+  );
+  finish(
+    Response.json({ id: "comp-one", customerId: "buyer", emailQueued: true }),
+  );
+  await flush();
+  assert.equal(el<HTMLInputElement>("#complimentary-email").value, "");
+  assert.equal(
+    el<HTMLButtonElement>('#complimentary-issue button[type="submit"]')
+      .disabled,
+    false,
+  );
+});
 test("standalone dashboard hides hosted controls and discloses zero application fees", async () => {
   await mount("/seller", () =>
     routes.set("GET /api/v1/platform/info", () =>
@@ -324,7 +523,7 @@ test("unconnected Stripe accounts keep the dashboard and connection action avail
   assert.ok(dom.document.querySelector("#product-create"));
   assert.equal(
     el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
-    true,
+    false,
   );
 });
 

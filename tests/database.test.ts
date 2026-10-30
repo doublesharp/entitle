@@ -60,6 +60,7 @@ test("SQLite migration preserves constraints and reruns without deleting records
       "011_sandboxes",
       "012_business_events",
       "013_platform_price_history",
+      "014_complimentary_licenses",
     ]);
     await assert.rejects(
       db("plans").insert({
@@ -199,6 +200,7 @@ test(
         { name: "011_sandboxes" },
         { name: "012_business_events" },
         { name: "013_platform_price_history" },
+        { name: "014_complimentary_licenses" },
       ]);
     } finally {
       try {
@@ -244,6 +246,7 @@ test("migration002 upgrades existing products without changing original migratio
       "011_sandboxes",
       "012_business_events",
       "013_platform_price_history",
+      "014_complimentary_licenses",
     ]);
     assert.equal(
       (await db("products").where({ id: "legacy" }).first()).plugin_basename,

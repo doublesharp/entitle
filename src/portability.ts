@@ -109,11 +109,18 @@ const shapes = {
       id: uuid,
       customer_id: uuid,
       product_id: uuid,
-      plan_id: uuid,
+      plan_id: uuid.nullable(),
       site_allowance: number,
       paid_through: number,
       billing_status: z.string().max(40),
-      subscription_id: identifier,
+      subscription_id: identifier.nullable(),
+      provenance: z.enum(["paid", "complimentary"]).default("paid"),
+      expires_at: number.positive().nullable().default(null),
+      complimentary_request_id: uuid.nullable().default(null),
+      complimentary_request_hash: checksum.nullable().default(null),
+      issued_by: z.string().min(1).max(64).nullable().default(null),
+      issued_at: number.nullable().default(null),
+      internal_note: z.string().max(2000).nullable().default(null),
       key_hash: checksum,
       revoked: flag,
       refund_revoked: flag,
@@ -486,17 +493,42 @@ function validateManifest(input: unknown, maxBytes: number): Manifest {
     );
   for (const row of manifest.tables.plans)
     valid(find("products", row.product_id));
-  for (const row of manifest.tables.licenses)
+  for (const row of manifest.tables.licenses) {
     valid(
-      find("customers", row.customer_id) &&
-        find("products", row.product_id) &&
-        find("plans", row.plan_id)?.product_id === row.product_id,
+      find("customers", row.customer_id) && find("products", row.product_id),
     );
+    if (row.provenance === "complimentary")
+      valid(
+        row.plan_id === null &&
+          row.subscription_id === null &&
+          row.paid_through === 0 &&
+          row.billing_status === "complimentary" &&
+          Number(row.site_allowance) > 0 &&
+          row.expires_at !== null &&
+          row.issued_at !== null &&
+          row.issued_at! < row.expires_at! &&
+          row.issued_by !== null &&
+          row.complimentary_request_id !== null &&
+          row.complimentary_request_hash !== null,
+      );
+    else
+      valid(
+        row.plan_id !== null &&
+          row.subscription_id !== null &&
+          find("plans", row.plan_id)?.product_id === row.product_id &&
+          row.expires_at === null &&
+          row.complimentary_request_id === null &&
+          row.complimentary_request_hash === null &&
+          row.issued_by === null &&
+          row.issued_at === null &&
+          row.internal_note === null,
+      );
+  }
   for (const row of manifest.tables.grants)
     valid(
       find("licenses", row.license_id)?.product_id ===
         find("plans", row.plan_id)?.product_id &&
-        find("licenses", row.license_id),
+        find("licenses", row.license_id)?.provenance === "paid",
     );
   for (const row of manifest.tables.installations) {
     valid(find("licenses", row.license_id));
@@ -1238,14 +1270,21 @@ function subscriptionIds(licenses: Row[], work: Row[], closures: Row[]) {
   return [
     ...new Set([
       ...licenses
-        .filter((row) => !closedCustomers.has(row.customer_id))
-        .map((row) => String(row.subscription_id)),
+        .filter(
+          (row) =>
+            row.provenance !== "complimentary" &&
+            !closedCustomers.has(row.customer_id),
+        )
+        .map((row) => row.subscription_id),
       ...work
         .filter((row) => row.kind === "reconcile" && row.payload !== "")
         .map((row) => JSON.parse(String(row.payload)).subscriptionId as string),
     ]),
   ]
-    .filter((id) => !closedSubscriptions.has(id))
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && id.length > 0 && !closedSubscriptions.has(id),
+    )
     .sort();
 }
 async function unpackBlob(

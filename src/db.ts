@@ -46,6 +46,7 @@ const migrationNames = [
   "011_sandboxes",
   "012_business_events",
   "013_platform_price_history",
+  "014_complimentary_licenses",
 ] as const;
 
 // Knex's migration listing can create its metadata tables. Serving roles only
@@ -98,7 +99,9 @@ export async function migrate(db: DB) {
                               ? import("./migrations/011_sandboxes.ts")
                               : m === "012_business_events"
                                 ? import("./migrations/012_business_events.ts")
-                                : import("./migrations/013_platform_price_history.ts"),
+                                : m === "013_platform_price_history"
+                                  ? import("./migrations/013_platform_price_history.ts")
+                                  : import("./migrations/014_complimentary_licenses.ts"),
     },
   });
 }
@@ -221,11 +224,18 @@ export interface License {
   id: string;
   customer_id: string;
   product_id: string;
-  plan_id: string;
+  plan_id: string | null;
   site_allowance: number;
   paid_through: number;
   billing_status: string;
-  subscription_id: string;
+  subscription_id: string | null;
+  provenance?: "paid" | "complimentary";
+  expires_at?: number | null;
+  complimentary_request_id?: string | null;
+  complimentary_request_hash?: string | null;
+  issued_by?: string | null;
+  issued_at?: number | null;
+  internal_note?: string | null;
   key_hash: string;
   revoked: number;
   refund_revoked: number;

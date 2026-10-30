@@ -50,10 +50,10 @@ The public `/docs` guide is available without an account on a running deployment
 | Workspace / tenant | An isolated publisher catalog, customers and releases. Public URLs use its immutable slug. |
 | Product | An application or extension with a fixed framework identity. |
 | Plan | An annual Stripe price mapped to an installation allowance. |
-| License | A customer's product, paid periods, allowance and access restrictions. |
+| License | A customer's product, paid or complimentary entitlement, allowance and access restrictions. |
 | Installation | A registered site or device with a scoped activation token. |
 | Release / asset | An immutable version and its package bytes; a native release can contain several targets. |
-| Entitlement | Whether paid rights and current restrictions permit a download. |
+| Entitlement | Whether paid rights or complimentary expiry and current restrictions permit access. |
 | Platform subscription | A hosted seller's service subscription, separate from buyer licenses. |
 
 Use your deployment origin in examples. `primary` is the default standalone
