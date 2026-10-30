@@ -138,8 +138,11 @@ let keys = [
   },
 ];
 const routes = new Map<string, (call: Call) => Response | Promise<Response>>();
-const denied = (status = 401, message = "Please sign in.") =>
-  Response.json({ error: { message, requestId: "request-ref" } }, { status });
+const denied = (status = 401, message = "Please sign in.", code?: string) =>
+  Response.json(
+    { error: { message, code, requestId: "request-ref" } },
+    { status },
+  );
 const fetcher: typeof fetch = async (input, init = {}) => {
   const call = {
     path: String(input),
@@ -373,7 +376,7 @@ test("a configured platform does not require a connected seller account or price
   await mount("/seller", () => {
     getOverview = () => ({ ...overview(), billingAvailable: true });
     routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
-      denied(409, "Connect a Stripe account first."),
+      denied(409, "Connect a Stripe account first.", "stripe_not_connected"),
     );
   });
   await click("Products");
@@ -506,17 +509,27 @@ test("hosted dashboard discloses its configured fee separately from Stripe charg
   assert.match(text(), /1% application fee/);
   assert.match(text(), /Stripe.*fees.*separate/i);
 });
-test("unconnected Stripe accounts keep the dashboard and connection action available", async () => {
+test("unconnected Stripe accounts load without an error and keep optional billing available", async () => {
   await mount("/seller", () => {
+    getOverview = () => ({ ...overview(), billingAvailable: true });
     routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
-      denied(409, "Connect a Stripe account first."),
+      denied(409, "Connect a Stripe account first.", "stripe_not_connected"),
     );
     routes.set("POST /api/v1/tenants/alpha/seller/stripe/connect", () =>
       Response.json({ url: "https://stripe.example.test/connect" }),
     );
   });
   assert.match(text(), /Your workspace in numbers/);
-  assert.match(text(), /Connect a Stripe account first/);
+  assert.equal(
+    dom.document.querySelector('[role="alert"]')?.textContent ?? "",
+    "",
+  );
+  assert.doesNotMatch(text(), /Connect a Stripe account first/);
+  await click("Billing");
+  assert.match(
+    el("#seller-panel-billing").textContent || "",
+    /Stripe is optional/,
+  );
   await click("Connect Stripe");
   assert.deepEqual(redirects, ["https://stripe.example.test/connect"]);
   await click("Products");
@@ -525,6 +538,27 @@ test("unconnected Stripe accounts keep the dashboard and connection action avail
     el<HTMLButtonElement>('#product-create button[type="submit"]').disabled,
     false,
   );
+  assert.equal(el<HTMLInputElement>("#include-paid-plan").checked, false);
+  await click("Licenses");
+  assert.ok(dom.document.querySelector("#complimentary-issue"));
+  routes.delete("GET /api/v1/tenants/alpha/seller/prices");
+  await click("Refresh dashboard");
+  await click("Products");
+  assert.equal(el<HTMLInputElement>("#include-paid-plan").checked, true);
+  assert.equal(el<HTMLSelectElement>("#price-id").value, "price_annual");
+});
+
+test("unexpected price conflicts remain visible", async () => {
+  await mount("/seller", () => {
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      denied(409, "Price catalog conflict.", "price_catalog_conflict"),
+    );
+  });
+  assert.match(
+    el('[role="alert"]').textContent || "",
+    /Price catalog conflict.*request-ref/,
+  );
+  assert.match(text(), /Your workspace in numbers/);
 });
 
 test("a temporary price outage preserves workspace data and recovers on refresh", async () => {
@@ -2115,9 +2149,9 @@ test("workspace slugs follow the name until edited and normalize manual input", 
   assert.equal(el<HTMLInputElement>("#tenant-slug").value, "");
 });
 
-test("Stripe connection errors explain the next step and open Billing without starting a connection", async () => {
+test("explicit Stripe action errors explain recovery without retrying the connection", async () => {
   await mount("/seller", () => {
-    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+    routes.set("POST /api/v1/tenants/alpha/seller/stripe/connect", () =>
       Response.json(
         {
           error: {
@@ -2130,6 +2164,7 @@ test("Stripe connection errors explain the next step and open Billing without st
       ),
     );
   });
+  await click("Connect Stripe");
   const alert = el('[role="alert"]');
   assert.match(alert.textContent!, /Stripe connection needed/);
   assert.match(alert.textContent!, /complimentary licenses/);
@@ -2141,8 +2176,8 @@ test("Stripe connection errors explain the next step and open Billing without st
   assert.equal(el("main h1").textContent, "Billing");
   assert.equal(el<HTMLElement>("#seller-panel-billing").hidden, false);
   assert.equal(
-    calls.some((call) => call.path.endsWith("/stripe/connect")),
-    false,
+    calls.filter((call) => call.path.endsWith("/stripe/connect")).length,
+    1,
   );
 });
 

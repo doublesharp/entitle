@@ -533,7 +533,12 @@ export function mountSellerApp(
                   return {
                     prices: [],
                     localMode: false,
-                    warning: failure,
+                    warning:
+                      failure instanceof ApiError &&
+                      failure.status === 409 &&
+                      failure.code === "stripe_not_connected"
+                        ? undefined
+                        : failure,
                   };
                 }),
               api.get<{ keys: Key[] }>("/keys"),
@@ -1476,7 +1481,7 @@ export function mountSellerApp(
                     "p",
                     data.billingAvailable === false
                       ? "Paid checkout and billing are unavailable until Stripe is configured. You can issue complimentary licenses now."
-                      : "Receive customer payments through your Stripe account.",
+                      : "Stripe is optional for product setup and complimentary licenses. Receive customer payments through your Stripe account when you are ready to sell paid plans.",
                   ),
                   hosted.value &&
                     h(
