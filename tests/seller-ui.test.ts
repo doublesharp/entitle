@@ -633,8 +633,10 @@ test("public docs own the setup guide and current server limits for either direc
     assert.equal(el("main h1").textContent, "Documentation");
     assert.match(
       el("#getting-started").textContent,
-      /Create your seller workspace and connect Stripe/,
+      /Create your seller workspace/,
     );
+    assert.match(el("#complimentary-licenses").textContent, /Issue complimentary license/);
+    assert.match(el("#complimentary-licenses").textContent, /never automatically charged or enrolled/);
     assert.match(el("#server-limits").textContent, /25 MiB/);
     assert.match(text(), /SQLite/);
     assert.match(text(), /merchant of record/i);
@@ -1093,7 +1095,7 @@ test("docs limits failures are retryable without hiding the setup guide", async 
   );
   assert.match(text(), /Limits unavailable. Reference: request-ref/);
   assert.equal(el("main h1").textContent, "Documentation");
-  assert.match(text(), /Create your seller workspace and connect Stripe/);
+  assert.match(text(), /Create your seller workspace/);
   routes.delete("GET /api/v1/platform/info");
   await click("Reload server limits");
   assert.match(text(), /25 MiB/);
