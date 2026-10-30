@@ -36,6 +36,7 @@ docs/development.md
 docs/getting-started.md
 docs/hosted-pricing.md
 docs/licensing.md
+docs/mcp.md
 docs/operator-maintenance.md
 docs/platform-support.md
 docs/portability.md
@@ -111,6 +112,8 @@ scripts/qualify-joomla.ts
 scripts/setup-local.ts
 scripts/source-files.txt
 scripts/start.ts
+scripts/stripe-double-check.py
+scripts/stripe-double-consumer.mjs
 scripts/wordpress-admin-update.mjs
 scripts/wordpress-build-fixture.py
 scripts/wordpress-cli.sh
@@ -120,12 +123,17 @@ scripts/wordpress-local-mu.php
 scripts/wordpress-publish.mjs
 scripts/wordpress-run.mjs
 src/account-management.ts
+src/agent-export.ts
+src/agent-operations.ts
+src/agent-session.ts
 src/app.ts
 src/artifact-streams.ts
 src/artifacts.ts
 src/auth.ts
 src/billing.ts
 src/business-events.ts
+src/cli-api.ts
+src/cli-files.ts
 src/cli.ts
 src/commerce-admin.ts
 src/config.ts
@@ -138,6 +146,7 @@ src/frameworks.ts
 src/http-timeout.ts
 src/licensing.ts
 src/maintenance-cli.ts
+src/mcp.ts
 src/metrics.ts
 src/migrations/001_initial.ts
 src/migrations/002_plugin_identity.ts
@@ -182,6 +191,8 @@ src/webhook-delivery.ts
 tests/JetBrainsScopeTest.java
 tests/accounts-management.test.ts
 tests/adapter-templates.test.ts
+tests/agent-interfaces-integration.test.ts
+tests/agent-interfaces.test.ts
 tests/api-coverage.test.ts
 tests/api-router.test.mjs
 tests/api.test.ts
