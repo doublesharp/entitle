@@ -1045,7 +1045,11 @@ test("request errors retain references, retry works, and session expiry clears o
       denied(503, "Dashboard unavailable."),
     );
   });
-  assert.match(text(), /Dashboard unavailable. Reference: request-ref/);
+  assert.match(el('[role="alert"]').textContent!, /Dashboard unavailable/);
+  assert.match(
+    el('[role="alert"] details').textContent!,
+    /Reference: request-ref/,
+  );
   routes.delete("GET /api/v1/tenants/alpha/seller/overview");
   await click("Refresh dashboard");
   assert.match(text(), /buyer@example.test/);
@@ -2038,14 +2042,14 @@ test("admin storage allowances use readable units without changing exact detaile
   }
 });
 
-test("first-time sellers see an open workspace form and a useful onboarding state", async () => {
+test("first-time sellers can create a workspace directly in the onboarding card", async () => {
   await mount("/seller", () => {
     tenants = [];
   });
-  assert.equal(
-    el<HTMLDetailsElement>("#workspace-create-disclosure").open,
-    true,
-  );
+  const setup = el(".seller-content .seller-panel");
+  assert.ok(setup.querySelector("#tenant-create"));
+  assert.equal(setup.querySelector("details"), null);
+  assert.equal(dom.document.querySelector(".seller-sidebar"), null);
   assert.equal(el("main h1").textContent, "Your software business");
   assert.match(
     el(".seller-content").textContent!,
@@ -2053,6 +2057,55 @@ test("first-time sellers see an open workspace form and a useful onboarding stat
   );
   assert.equal(dom.document.querySelector("#tenant-select"), null);
   assert.equal(dom.document.querySelector(".seller-nav"), null);
+});
+
+test("workspace slugs follow the name until edited and normalize manual input", async () => {
+  await mount("/seller", () => {
+    tenants = [];
+  });
+  await input("#tenant-name", "Validated Field");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "validated-field");
+  await input("#tenant-name", "Café & Field 2");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "cafe-field-2");
+  await input("#tenant-slug", "Custom Slug_42!/@");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "custom-slug-42");
+  await input("#tenant-name", "Renamed workspace");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "custom-slug-42");
+  await input("#tenant-slug", "");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "");
+  await input("#tenant-name", "Another name");
+  assert.equal(el<HTMLInputElement>("#tenant-slug").value, "");
+});
+
+test("Stripe connection errors explain the next step and open Billing without starting a connection", async () => {
+  await mount("/seller", () => {
+    routes.set("GET /api/v1/tenants/alpha/seller/prices", () =>
+      Response.json(
+        {
+          error: {
+            code: "stripe_not_connected",
+            message: "Connect a Stripe account first.",
+            requestId: "stripe-reference",
+          },
+        },
+        { status: 409 },
+      ),
+    );
+  });
+  const alert = el('[role="alert"]');
+  assert.match(alert.textContent!, /Stripe connection needed/);
+  assert.match(alert.textContent!, /complimentary licenses/);
+  assert.match(
+    alert.querySelector("details")!.textContent!,
+    /stripe-reference/,
+  );
+  await click("Open Billing");
+  assert.equal(el("main h1").textContent, "Billing");
+  assert.equal(el<HTMLElement>("#seller-panel-billing").hidden, false);
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/stripe/connect")),
+    false,
+  );
 });
 
 test("refresh headings describe loading then return to the retained section", async () => {

@@ -191,6 +191,16 @@ const readableBytes = (bytes: number) => {
 };
 const btn = (label: string, action: () => void, disabled = false) =>
   h("button", { type: "button", onClick: action, disabled }, label);
+const workspaceSlug = (value: string) =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-/, "")
+    .slice(0, 63);
 const section = (title: string, children: unknown[]) =>
   h("section", { class: "panel seller-panel" }, [
     h("h2", title),
@@ -291,6 +301,22 @@ export function mountSellerApp(
           notice = ref(""),
           token = ref<string | null>(null),
           secret = ref("");
+        const slugEdited = ref(false);
+        const workspaceCreateOpen = ref(false);
+        const errorReference = ref<string>();
+        const stripeConnectionNeeded = ref(false);
+        const reportError = (failure: unknown) => {
+          error.value =
+            failure instanceof ApiError
+              ? failure.message
+              : errorMessage(failure);
+          errorReference.value =
+            failure instanceof ApiError ? failure.requestId : undefined;
+          stripeConnectionNeeded.value =
+            failure instanceof ApiError &&
+            (failure.code === "stripe_not_connected" ||
+              failure.message === "Connect a Stripe account first.");
+        };
         const maxUpload = ref(26214400),
           maxNativeUpload = ref(104857600),
           file = ref<File | null>(null),
@@ -438,6 +464,10 @@ export function mountSellerApp(
           fields.value["key-verification-token"] = "";
           fields.value["release-verification-token"] = "";
           selected.value = "";
+          fields.value["tenant-name"] = "";
+          fields.value["tenant-slug"] = "";
+          slugEdited.value = false;
+          workspaceCreateOpen.value = false;
           clearComplimentary();
           complimentaryWorkspace = "";
         };
@@ -445,11 +475,13 @@ export function mountSellerApp(
           if (busy.value) return;
           busy.value = true;
           error.value = "";
+          errorReference.value = undefined;
+          stripeConnectionNeeded.value = false;
           notice.value = "";
           try {
             await action();
           } catch (failure) {
-            error.value = errorMessage(failure);
+            reportError(failure);
             if (expire && failure instanceof ApiError && failure.status === 401)
               clearSession();
           } finally {
@@ -477,7 +509,7 @@ export function mountSellerApp(
               api.get<Overview>("/overview"),
               api
                 .get<{ prices: Price[]; localMode: boolean }>("/prices")
-                .then((data) => ({ ...data, warning: "" }))
+                .then((data) => ({ ...data, warning: undefined }))
                 .catch((failure: unknown) => {
                   if (
                     failure instanceof ApiError &&
@@ -487,13 +519,13 @@ export function mountSellerApp(
                   return {
                     prices: [],
                     localMode: false,
-                    warning: errorMessage(failure),
+                    warning: failure,
                   };
                 }),
               api.get<{ keys: Key[] }>("/keys"),
             ]);
             if (priceData.warning && data.billingAvailable !== false)
-              error.value = priceData.warning;
+              reportError(priceData.warning);
             overview.value = data;
             prices.value = priceData.prices;
             localMode.value = priceData.localMode;
@@ -632,14 +664,50 @@ export function mountSellerApp(
               min: type === "number" ? 1 : undefined,
               max: id === "complimentary-allowance" ? 100000 : undefined,
               maxlength:
-                id === "complimentary-note"
-                  ? 2000
-                  : id === "complimentary-email"
-                    ? 254
-                    : undefined,
+                id === "tenant-slug"
+                  ? 63
+                  : id === "tenant-name"
+                    ? 200
+                    : id === "complimentary-note"
+                      ? 2000
+                      : id === "complimentary-email"
+                        ? 254
+                        : undefined,
+              pattern:
+                id === "tenant-slug"
+                  ? "[a-z0-9]([a-z0-9\\-]{0,61}[a-z0-9])?"
+                  : undefined,
+              "aria-describedby":
+                id === "tenant-slug" ? "tenant-slug-hint" : undefined,
+              autocapitalize: id === "tenant-slug" ? "none" : undefined,
+              spellcheck: id === "tenant-slug" ? false : undefined,
               onInput: (event: Event) => {
-                fields.value[id] = (event.target as HTMLInputElement).value;
+                const input = event.target as HTMLInputElement;
+                if (id === "tenant-slug") {
+                  slugEdited.value = true;
+                  const position = input.selectionStart;
+                  const value = workspaceSlug(input.value);
+                  const caret =
+                    position === null
+                      ? value.length
+                      : workspaceSlug(input.value.slice(0, position)).length;
+                  input.value = value;
+                  input.setSelectionRange(caret, caret);
+                  fields.value[id] = value;
+                } else {
+                  fields.value[id] = input.value;
+                  if (id === "tenant-name" && !slugEdited.value)
+                    fields.value["tenant-slug"] = workspaceSlug(
+                      input.value,
+                    ).replace(/-$/, "");
+                }
               },
+              onBlur:
+                id === "tenant-slug"
+                  ? () => {
+                      fields.value[id] = fields.value[id]!.replace(/-$/, "");
+                    }
+                  : undefined,
             }),
           ]);
         const select = (
@@ -717,6 +785,88 @@ export function mountSellerApp(
               ])
             : node;
         };
+        const workspaceForm = () =>
+          form(
+            "tenant-create",
+            async () => {
+              const result = await platform.post<{ tenant: Tenant }>(
+                "/tenants",
+                {
+                  slug: fields.value["tenant-slug"]!.replace(/-$/, ""),
+                  name: fields.value["tenant-name"],
+                },
+              );
+              seller.value!.tenants.push(result.tenant);
+              activePage.value = "overview";
+              selected.value = result.tenant.slug;
+              fields.value["tenant-name"] = "";
+              fields.value["tenant-slug"] = "";
+              slugEdited.value = false;
+              workspaceCreateOpen.value = false;
+              await dashboard();
+            },
+            [
+              field("tenant-name", "Workspace name"),
+              h("div", { class: "workspace-slug-field" }, [
+                field("tenant-slug", "Workspace slug"),
+                h(
+                  "p",
+                  { id: "tenant-slug-hint", class: "field-hint" },
+                  "Your workspace’s unique address. Use lowercase letters, numbers and hyphens, up to 63 characters. You can edit the suggested slug.",
+                ),
+              ]),
+            ],
+            "Create workspace",
+          );
+        const workspaceControls = () =>
+          h(
+            "section",
+            { class: "workspace-toolbar", "aria-label": "Workspace controls" },
+            [
+              h("div", { class: "workspace-toolbar-row" }, [
+                hosted.value &&
+                  h("div", { class: "workspace-selector" }, [
+                    h("label", { for: "tenant-select" }, "Selected workspace"),
+                    h(
+                      "select",
+                      {
+                        id: "tenant-select",
+                        disabled: busy.value,
+                        value: selected.value,
+                        onChange: (event: Event) => {
+                          activePage.value = "overview";
+                          accountProof.value = "";
+                          panelProof.value = null;
+                          selected.value = (
+                            event.target as HTMLSelectElement
+                          ).value;
+                          void run(dashboard);
+                        },
+                      },
+                      seller.value!.tenants.map((item) =>
+                        h("option", { value: item.slug }, item.name),
+                      ),
+                    ),
+                  ]),
+                btn("Refresh dashboard", () => void run(dashboard), busy.value),
+              ]),
+              hosted.value &&
+                h(
+                  "details",
+                  {
+                    id: "workspace-create-disclosure",
+                    class: "workspace-create",
+                    open: workspaceCreateOpen.value,
+                    onToggle: (event: Event) => {
+                      workspaceCreateOpen.value = (
+                        event.target as HTMLDetailsElement
+                      ).open;
+                    },
+                  },
+                  [h("summary", "New workspace"), workspaceForm()],
+                ),
+            ],
+          );
         const redirect = async (api: ApiClient, path: string) => {
           const result = await api.post<{ url: string }>(path, {});
           window.location.assign(result.url);
@@ -1802,11 +1952,18 @@ export function mountSellerApp(
             ]),
           ];
         };
+        const layoutClass = () =>
+          seller.value?.tenants.length
+            ? "seller-layout"
+            : "seller-layout seller-onboarding";
         return () =>
           h("div", { class: "app seller-app" }, [
             h("a", { href: "#main", class: "skip-link" }, "Skip to content"),
             appHeader(),
             h("main", { id: "main", class: "page-main seller-main" }, [
+              seller.value &&
+                seller.value.tenants.length > 0 &&
+                workspaceControls(),
               h("div", { class: "page-heading" }, [
                 h("div", [
                   h("p", { class: "eyebrow" }, "Seller workspace"),
@@ -1855,7 +2012,48 @@ export function mountSellerApp(
                   ),
                 ]),
               error.value &&
-                h("p", { role: "alert", class: "error-banner" }, error.value),
+                h(
+                  "div",
+                  {
+                    role: "alert",
+                    class: [
+                      "seller-alert",
+                      stripeConnectionNeeded.value && "seller-alert-warning",
+                    ],
+                  },
+                  [
+                    h("div", { class: "seller-alert-copy" }, [
+                      h(
+                        "h2",
+                        stripeConnectionNeeded.value
+                          ? "Stripe connection needed"
+                          : "We couldn’t complete that request",
+                      ),
+                      h("p", error.value),
+                      stripeConnectionNeeded.value &&
+                        h(
+                          "p",
+                          "Open Billing to connect Stripe and load paid plans. You can keep setting up products and issuing complimentary licenses in the meantime.",
+                        ),
+                      errorReference.value &&
+                        h("details", { class: "seller-alert-details" }, [
+                          h("summary", "Support details"),
+                          h("p", `Reference: ${errorReference.value}`),
+                        ]),
+                    ]),
+                    h("div", { class: "button-row" }, [
+                      stripeConnectionNeeded.value &&
+                        overview.value &&
+                        btn("Open Billing", () => {
+                          activePage.value = "billing";
+                          error.value = "";
+                        }),
+                      btn("Dismiss", () => {
+                        error.value = "";
+                      }),
+                    ]),
+                  ],
+                ),
               notice.value &&
                 h("p", { role: "status", class: "notice" }, notice.value),
               busy.value && h("p", { role: "status" }, "Working…"),
@@ -1865,24 +2063,26 @@ export function mountSellerApp(
                     "p",
                     "Use your emailed link to sign in. The link is single-use.",
                   ),
-                  btn(
-                    "Confirm seller sign in",
-                    () =>
-                      void run(async () => {
-                        await platform.post(
-                          "/auth/consume",
-                          { token: token.value },
-                          false,
-                        );
-                        token.value = null;
-                        clearSession();
-                        await session();
-                      }, false),
-                    busy.value || !token.value,
-                  ),
-                  btn("Cancel sign in", () => {
-                    token.value = null;
-                  }),
+                  h("div", { class: "button-row" }, [
+                    btn(
+                      "Confirm seller sign in",
+                      () =>
+                        void run(async () => {
+                          await platform.post(
+                            "/auth/consume",
+                            { token: token.value },
+                            false,
+                          );
+                          token.value = null;
+                          clearSession();
+                          await session();
+                        }, false),
+                      busy.value || !token.value,
+                    ),
+                    btn("Cancel sign in", () => {
+                      token.value = null;
+                    }),
+                  ]),
                 ]),
               loading.value
                 ? h("p", { role: "status" }, "Loading seller session…")
@@ -1936,194 +2136,133 @@ export function mountSellerApp(
                           busy.value,
                         ),
                     ])
-                  : h("div", { class: "seller-layout" }, [
-                      h(
-                        "aside",
-                        {
-                          class: "seller-sidebar",
-                          "aria-label": "Workspace controls",
-                        },
-                        [
-                          h("div", { class: "workspace-switcher" }, [
-                            hosted.value &&
-                              seller.value.tenants.length > 0 &&
+                  : h("div", { class: layoutClass() }, [
+                      seller.value.tenants.length > 0 &&
+                        h(
+                          "aside",
+                          {
+                            class: "seller-sidebar",
+                            "aria-label": "Workspace navigation",
+                          },
+                          [
+                            overview.value &&
                               h(
-                                "label",
-                                { for: "tenant-select" },
-                                "Selected workspace",
-                              ),
-                            hosted.value &&
-                              seller.value.tenants.length > 0 &&
-                              h(
-                                "select",
+                                "nav",
                                 {
-                                  id: "tenant-select",
-                                  disabled: busy.value,
-                                  value: selected.value,
-                                  onChange: (event: Event) => {
-                                    activePage.value = "overview";
-                                    accountProof.value = "";
-                                    panelProof.value = null;
-                                    selected.value = (
-                                      event.target as HTMLSelectElement
-                                    ).value;
-                                    void run(dashboard);
-                                  },
-                                },
-                                seller.value.tenants.map((item) =>
-                                  h("option", { value: item.slug }, item.name),
-                                ),
-                              ),
-                            seller.value.tenants.length > 0 &&
-                              btn(
-                                "Refresh dashboard",
-                                () => void run(dashboard),
-                                busy.value,
-                              ),
-                            hosted.value &&
-                              h(
-                                "details",
-                                {
-                                  id: "workspace-create-disclosure",
-                                  class: "workspace-create",
-                                  open: seller.value.tenants.length === 0,
+                                  "aria-label": "Workspace navigation",
+                                  class: "seller-nav",
                                 },
                                 [
-                                  h("summary", "New workspace"),
-                                  form(
-                                    "tenant-create",
-                                    async () => {
-                                      const result = await platform.post<{
-                                        tenant: Tenant;
-                                      }>("/tenants", {
-                                        slug: fields.value["tenant-slug"],
-                                        name: fields.value["tenant-name"],
-                                      });
-                                      seller.value!.tenants.push(result.tenant);
-                                      activePage.value = "overview";
-                                      selected.value = result.tenant.slug;
-                                      await dashboard();
+                                  h(
+                                    "label",
+                                    {
+                                      class: "seller-mobile-nav",
+                                      for: "seller-mobile-page",
                                     },
                                     [
-                                      field("tenant-name", "Workspace name"),
-                                      field("tenant-slug", "Workspace slug"),
-                                    ],
-                                    "Create workspace",
-                                  ),
-                                ],
-                              ),
-                          ]),
-                          overview.value &&
-                            h(
-                              "nav",
-                              {
-                                "aria-label": "Workspace navigation",
-                                class: "seller-nav",
-                              },
-                              [
-                                h(
-                                  "label",
-                                  {
-                                    class: "seller-mobile-nav",
-                                    for: "seller-mobile-page",
-                                  },
-                                  [
-                                    "Go to",
-                                    h(
-                                      "select",
-                                      {
-                                        id: "seller-mobile-page",
-                                        value: activePage.value,
-                                        disabled: busy.value,
-                                        onChange: (event: Event) => {
-                                          activePage.value = (
-                                            event.target as HTMLSelectElement
-                                          ).value as SellerPage;
-                                        },
-                                      },
-                                      sellerPages.map((page) =>
-                                        h(
-                                          "option",
-                                          { value: page.id },
-                                          page.label,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                h("div", { class: "seller-desktop-nav" }, [
-                                  ...sellerPages
-                                    .filter((page) => page.id === "overview")
-                                    .map((page) =>
+                                      "Go to",
                                       h(
-                                        "button",
+                                        "select",
                                         {
-                                          id: `seller-nav-${page.id}`,
-                                          type: "button",
-                                          class: "seller-nav-link",
-                                          "aria-controls": `seller-panel-${page.id}`,
-                                          "aria-current":
-                                            activePage.value === page.id
-                                              ? "page"
-                                              : undefined,
+                                          id: "seller-mobile-page",
+                                          value: activePage.value,
                                           disabled: busy.value,
-                                          onClick: () => {
-                                            activePage.value = page.id;
+                                          onChange: (event: Event) => {
+                                            activePage.value = (
+                                              event.target as HTMLSelectElement
+                                            ).value as SellerPage;
                                           },
                                         },
-                                        page.label,
-                                      ),
-                                    ),
-                                  ...sellerPageGroups.map((group) =>
-                                    h("div", { class: "seller-nav-group" }, [
-                                      h("p", group.label),
-                                      ...sellerPages
-                                        .filter((page) =>
-                                          group.pages.includes(page.id),
-                                        )
-                                        .map((page) =>
+                                        sellerPages.map((page) =>
                                           h(
-                                            "button",
-                                            {
-                                              id: `seller-nav-${page.id}`,
-                                              type: "button",
-                                              class: "seller-nav-link",
-                                              "aria-controls": `seller-panel-${page.id}`,
-                                              "aria-current":
-                                                activePage.value === page.id
-                                                  ? "page"
-                                                  : undefined,
-                                              disabled: busy.value,
-                                              onClick: () => {
-                                                activePage.value = page.id;
-                                              },
-                                            },
+                                            "option",
+                                            { value: page.id },
                                             page.label,
                                           ),
                                         ),
-                                    ]),
+                                      ),
+                                    ],
                                   ),
-                                ]),
-                              ],
-                            ),
-                        ],
-                      ),
+                                  h("div", { class: "seller-desktop-nav" }, [
+                                    ...sellerPages
+                                      .filter((page) => page.id === "overview")
+                                      .map((page) =>
+                                        h(
+                                          "button",
+                                          {
+                                            id: `seller-nav-${page.id}`,
+                                            type: "button",
+                                            class: "seller-nav-link",
+                                            "aria-controls": `seller-panel-${page.id}`,
+                                            "aria-current":
+                                              activePage.value === page.id
+                                                ? "page"
+                                                : undefined,
+                                            disabled: busy.value,
+                                            onClick: () => {
+                                              activePage.value = page.id;
+                                            },
+                                          },
+                                          page.label,
+                                        ),
+                                      ),
+                                    ...sellerPageGroups.map((group) =>
+                                      h("div", { class: "seller-nav-group" }, [
+                                        h("p", group.label),
+                                        ...sellerPages
+                                          .filter((page) =>
+                                            group.pages.includes(page.id),
+                                          )
+                                          .map((page) =>
+                                            h(
+                                              "button",
+                                              {
+                                                id: `seller-nav-${page.id}`,
+                                                type: "button",
+                                                class: "seller-nav-link",
+                                                "aria-controls": `seller-panel-${page.id}`,
+                                                "aria-current":
+                                                  activePage.value === page.id
+                                                    ? "page"
+                                                    : undefined,
+                                                disabled: busy.value,
+                                                onClick: () => {
+                                                  activePage.value = page.id;
+                                                },
+                                              },
+                                              page.label,
+                                            ),
+                                          ),
+                                      ]),
+                                    ),
+                                  ]),
+                                ],
+                              ),
+                          ],
+                        ),
                       h("div", { class: "seller-content" }, [
                         seller.value.tenants.length === 0 &&
                           section("Create your first workspace", [
                             h(
                               "p",
-                              "Use the workspace form to get started. Then connect Stripe, add your products and publish releases.",
+                              "Use the form below to get started. Add a product, publish a release and issue complimentary licenses for an invited pilot. Connect Stripe when you’re ready to offer paid plans.",
                             ),
+                            hosted.value && workspaceForm(),
                           ]),
                         recovery.value && renderRecovery(),
                         (recovery.value || seller.value.tenants.length === 0) &&
-                          btn(
-                            "Account security",
-                            () => {
-                              activePage.value = "security";
-                            },
-                            busy.value,
+                          h(
+                            "div",
+                            { class: "button-row seller-account-actions" },
+                            [
+                              btn(
+                                "Account security",
+                                () => {
+                                  activePage.value = "security";
+                                },
+                                busy.value,
+                              ),
+                            ],
                           ),
                         accountProof.value &&
                           h("div", { class: "panel verification-proof" }, [
