@@ -171,6 +171,7 @@ src/sandbox-api.ts
 src/sandboxes.ts
 src/seller-api.ts
 src/server.ts
+src/sign-in-email.ts
 src/site.ts
 src/storage.ts
 src/stripe.ts
@@ -264,6 +265,7 @@ tests/seller-ui.test.ts
 tests/server-container.test.mjs
 tests/server-coverage.test.ts
 tests/server-roles.test.ts
+tests/sign-in-email.test.ts
 tests/storage.test.ts
 tests/streaming-artifacts.test.ts
 tests/streaming-framework.test.ts

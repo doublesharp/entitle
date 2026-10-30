@@ -1018,6 +1018,9 @@ test("default Nodemailer transport authenticates to a real SMTP sink and drains 
   assert.equal(smtp.messages.length, 1);
   assert.match(smtp.messages[0]!, /To: alice@example.test/);
   assert.match(smtp.messages[0]!, /Subject: Sign in to Doublesharp Entitle/);
+  assert.match(smtp.messages[0]!, /Content-Type: multipart\/alternative;/);
+  assert.match(smtp.messages[0]!, /Content-Type: text\/plain; charset=utf-8/);
+  assert.match(smtp.messages[0]!, /Content-Type: text\/html; charset=utf-8/);
   assert.match(smtp.messages[0]!, /#login=/);
   assert.deepEqual(smtp.authenticated, ["\0fixture-user\0fixture-password"]);
   const email = await f.db("emails").first();
