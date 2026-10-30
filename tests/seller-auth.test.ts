@@ -17,6 +17,7 @@ import { createDb, migrate, reset } from "../src/db.ts";
 import { loadConfig } from "../src/config.ts";
 import { hash, unseal } from "../src/crypto.ts";
 import type { Message } from "../src/email.ts";
+import { Window } from "happy-dom";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 const root = await mkdtemp(
@@ -647,4 +648,48 @@ test("operator-configured seller tenant and storage limits apply without renewin
     limited.create(owner.seller, { slug: "another", name: "Another" }),
     { code: "tenant_limit" },
   );
+});
+
+test("seller sign-in email provides an accessible HTML action and matching text fallback", async () => {
+  await send("owner@example.test");
+  const row = await db("platform_emails").first();
+  const message = unseal<Message>(row.payload, config.secret);
+  assert.equal(typeof message.html, "string", "sign-in mail must include HTML");
+  const window = new Window();
+  try {
+    window.document.write(message.html!);
+    const document = window.document;
+    assert.equal(document.documentElement.lang, "en");
+    assert.equal(document.querySelectorAll("h1").length, 1);
+    const action = Array.from(document.querySelectorAll("a")).find(
+      (link) => link.textContent.trim() === "Sign in to Entitle",
+    );
+    assert.ok(action, "a clearly named sign-in action is required");
+    const url = /https?:\/\/[^\s]+#seller-login=[A-Za-z0-9_-]+/.exec(
+      message.text,
+    )![0];
+    assert.equal(action.getAttribute("href"), url);
+    const fallback = Array.from(document.querySelectorAll("a")).find(
+      (link) => link.textContent.trim() === url,
+    );
+    assert.equal(
+      fallback?.getAttribute("href"),
+      url,
+      "the full URL must remain copyable",
+    );
+    for (const content of [document.body.textContent, message.text]) {
+      assert.match(content, /same browser/i);
+      assert.match(content, /latest.*link/i);
+      assert.match(content, /15 minutes/);
+      assert.match(content, /single.use/i);
+      assert.match(content, /didn.t request|did not request/i);
+    }
+    assert.equal(document.querySelectorAll("img, script, form").length, 0);
+    assert.ok(
+      !JSON.stringify(row).includes(url),
+      "HTML credentials stay encrypted in the queue",
+    );
+  } finally {
+    await window.happyDOM.close();
+  }
 });
