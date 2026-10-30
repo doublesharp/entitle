@@ -16,7 +16,7 @@ import Stripe from "stripe";
 process.env.NODE_ENV = "test";
 const base = "/api/v1/tenants/primary";
 async function fixture(t: TestContext, production = false) {
-  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/complimentary/case-");
+  const root = await mkdtemp("/Volumes/Scratch/entitle/tmp/complimentary-case-");
   const config = loadConfig({ APP_SECRET: "42".repeat(32), OPERATOR_TOKEN: "operator-test-".repeat(4), DATA_DIR: root,
     DEPLOYMENT_MODE: production ? "standalone" : "hosted", APP_BASE_PATH: "", LOCAL_BILLING: "false",
     ...(production ? { NODE_ENV: "production", PUBLIC_ORIGIN: "https://licenses.example.test", STANDALONE_OWNER_EMAIL: "owner@example.test",
