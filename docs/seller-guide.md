@@ -18,8 +18,16 @@ Its identity and configuration lock after first use.
 | Generic                  | Optional `activationKind`, `device` by default or explicitly `site`.                                                      |
 | Electron, Tauri, Sparkle | Empty framework configuration; targets and signing metadata belong to release assets.                                     |
 
-Create an annual recurring Stripe price on your merchant account, then select it
-for a plan. A plan pairs the price with an installation allowance. Hosted
+Products can be created without a paid plan for complimentary licensing, even
+when the server has Stripe configured. Leave **Include annual paid plan**
+unchecked; no connected Stripe account or price is required. When no prices are
+available, this option is unchecked automatically and product creation remains
+available.
+
+To offer a paid plan, create an annual recurring Stripe price on your merchant
+account and enable **Include annual paid plan**, then select the price. The
+option is enabled by default when prices are available. A plan pairs the price
+with an installation allowance. Hosted
 publishers use their connected account; standalone uses its configured direct
 account. Test/live mode must match. A local fixture price is not a real Stripe
 price.
@@ -63,6 +71,39 @@ feed offer cannot download a withdrawn release. Publish corrected bytes as a new
 version; withdrawal does not remove installed software.
 
 ## Support a buyer
+
+### Issue a complimentary license
+
+Open **Licenses → Issue complimentary license**. Enter the customer's email,
+select the product, choose its installation allowance and a future expiration
+date and time, and optionally add an internal note. The time shown in the form
+uses your browser's local time zone. Review the confirmation before issuing.
+
+Entitle creates or reuses the customer in this workspace, issues a normal license
+key, and queues the existing encrypted license email. The success notice confirms
+queuing; SMTP delivery is handled by the normal email worker. A failed request
+can be retried with the same form values; its request ID is retained to prevent
+duplicate issuance and email jobs. Changing the form values starts a new request.
+
+Complimentary licenses are labelled in the seller and customer views. They have
+their own expiration and allowance and create no invoice, payment, revenue or
+subscription. The note is internal. No Stripe account or price is needed:
+create the product without a paid plan, publish its
+release, and issue the complimentary license. Paid checkout and billing remain
+unavailable until their required configuration is present.
+
+The normal activation, seat enforcement, protected downloads and updater APIs
+apply, including the existing WordPress client. Expiration blocks new activations,
+downloads and updates while installed plugin features continue working. Seller
+revocation/restoration and customer key replacement use the same controls as
+other licenses. Restoration does not extend expiration. Key replacement revokes
+old keys and activation tokens and queues a replacement email.
+
+Pilot customers are never automatically charged or enrolled in a subscription.
+Any later paid purchase follows the normal checkout flow and creates a separate
+paid entitlement.
+
+### Diagnose an existing license
 
 Use the license view to distinguish paid-through time, manual revocation,
 refund/dispute restrictions and installation usage. Ask the buyer for a request

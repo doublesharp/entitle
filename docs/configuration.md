@@ -89,13 +89,13 @@ database together. Per-process reservations are not filesystem quotas.
 | Variable                         | Default                                  | Constraint / purpose                                                                                                   |
 | -------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `LOCAL_BILLING`                  | `false`                                  | Synthetic local purchases; blocks real Checkout/Portal and is forbidden in production.                                 |
-| `STRIPE_SECRET_KEY`              | `sk_test_local` outside production       | Merchant secret in standalone, platform secret in hosted. Required in production; test/live prefix must match mode.    |
-| `STRIPE_PUBLISHABLE_KEY`         | Empty                                    | Required in production; matching `pk_test_` or `pk_live_` key for browser Checkout.                                    |
+| `STRIPE_SECRET_KEY`              | Empty production; `sk_test_local` development | Merchant secret in standalone, platform secret in hosted. Required when enabling paid billing; test/live prefix must match mode. |
+| `STRIPE_PUBLISHABLE_KEY`         | Empty                                    | Required for paid production; matching `pk_test_` or `pk_live_` key for browser Checkout.                              |
 | `STRIPE_LIVE_MODE`               | `false`                                  | Exact `true` selects live mode.                                                                                        |
-| `STRIPE_WEBHOOK_SECRET`          | `whsec_local` outside production         | Merchant webhook secret in standalone; platform subscription webhook secret in hosted. Required in production.         |
-| `STRIPE_CONNECT_CLIENT_ID`       | Empty                                    | Hosted Connect OAuth application; required in hosted production.                                                       |
-| `STRIPE_CONNECT_WEBHOOK_SECRET`  | `whsec_connect_local` outside production | Separate Connect event endpoint secret; required in hosted production.                                                 |
-| `PLATFORM_STRIPE_PRICE_ID`       | Empty                                    | Hosted Starter subscription price; required in hosted production.                                                      |
+| `STRIPE_WEBHOOK_SECRET`          | Empty production; `whsec_local` development | Merchant webhook secret in standalone; platform subscription webhook secret in hosted. Required for paid production.  |
+| `STRIPE_CONNECT_CLIENT_ID`       | Empty                                    | Hosted Connect OAuth application; required when enabling hosted paid billing.                                          |
+| `STRIPE_CONNECT_WEBHOOK_SECRET`  | Empty production; `whsec_connect_local` development | Separate Connect event endpoint secret; required when enabling hosted paid billing.                           |
+| `PLATFORM_STRIPE_PRICE_ID`       | Empty                                    | Hosted Starter subscription price; required when enabling hosted paid billing.                                         |
 | `PLATFORM_PRO_STRIPE_PRICE_ID`   | Omitted                                  | Distinct `price_...` ID for a positive monthly recurring Pro price. Omit until configured.                             |
 | `HOSTED_APPLICATION_FEE_PERCENT` | `1` hosted; `0` standalone               | 0-100 with at most two decimal places. Nonzero is refused in standalone. Applies to newly created buyer subscriptions. |
 | `STANDALONE_STRIPE_ACCOUNT_ID`   | Omitted                                  | Explicit operator-verified `acct_...` merchant identity for standalone export. Does not change direct charge routing.  |
@@ -105,6 +105,17 @@ Both deployment modes support that checkout interface and Elements. See
 [hosted pricing](hosted-pricing.md) for paid Pro grants, fee retention and price
 history. Changing an environment price does not rewrite historical grants or
 existing buyer subscription fee percentages.
+
+Production can issue complimentary licenses before Stripe is configured. Set
+`LOCAL_BILLING=false` and omit or leave empty all primary Stripe, Connect and
+platform price settings. Keep the normal HTTPS, owner, secret, SMTP, private S3
+and trusted-proxy configuration. Complimentary issuance does not create a payment
+or subscription. Paid checkout, billing and Stripe reconciliation stay unavailable.
+Providing any primary Stripe/Connect/platform price value enables the existing
+complete production validation for that deployment mode; partial configuration
+is refused. Separate sandbox test credentials do not enable primary billing.
+Development's placeholder key/signing-secret defaults are local fixtures and
+are never supplied as production defaults.
 
 | Optional sandbox variable     | Requirement                                       |
 | ----------------------------- | ------------------------------------------------- |

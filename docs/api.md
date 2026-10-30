@@ -28,7 +28,7 @@ ID. Do not substitute an internal tenant ID for its public slug.
 | `read`              | Overview, price picker, safe jobs, features and basic/eligible advanced health reads. |
 | `catalog:write`     | Save products and plan mappings.                                                      |
 | `releases:write`    | Publish ZIPs/assets and withdraw releases.                                            |
-| `licenses:write`    | Set/clear seller revocation and enabled local purchase fixtures.                      |
+| `licenses:write`    | Issue complimentary licenses, set/clear seller revocation and enabled local purchase fixtures. |
 | `billing:reconcile` | Queue reconciliation, run tenant jobs and retry work/email.                           |
 | `operations:write`  | Update operating settings and manage eligible webhook endpoints/deliveries.           |
 | `data:export`       | Create, download and delete encrypted workspace exports.                              |
@@ -220,6 +220,51 @@ Native asset upload uses `Content-Type: application/octet-stream`, required `Con
 WordPress release metadata: `{changelog,minWp?,minPhp?,minFree?,tested?}`. Defaults 6.0/8.0/0.0.0/0.0.0 respectively. Authentication precedes parsing. Default WordPress cap 25 MiB, hard ceiling 100 MiB. Changelog schema permits 30,000 characters, but the entire encoded metadata header must fit 12,288 bytes. Publication verifies paths, CRC, expansion/entries, plugin identity/version, SHA-256 and private storage before committing metadata. Withdrawn objects remain stored and count against quota.
 
 Catalog setup preserves immutable price-to-product and allowance mappings. Add a new Stripe price to change seats. A future paid plan takes effect at its paid period start; overlapping paid grants retain the larger allowance through its paid period. No unpaid upgrade grants seats.
+
+### Complimentary issuance
+
+`POST /api/v1/tenants/:tenant/seller/licenses/complimentary` requires the workspace
+owner's browser session with Origin/CSRF, or a workspace key with `licenses:write`.
+
+```json
+{
+  "email": "pilot@example.com",
+  "productId": "PRODUCT_ID",
+  "siteAllowance": 2,
+  "expiresAt": 1893456000000,
+  "note": "Invited pilot",
+  "requestId": "bc2ac459-fd7b-4f49-a6f6-f52b57c35c0b",
+  "confirm": true
+}
+```
+
+`expiresAt` is a future Unix millisecond timestamp, `siteAllowance` is 1–100000,
+and the optional internal `note` is at most 2000 characters. The product must
+belong to this workspace; it needs no paid plan or Stripe price. The response is
+`{id,customerId,emailQueued:true}`. No raw key is returned. The existing encrypted
+license-key outbox delivers it to the normalized customer email.
+
+Keep the same UUID and identical details when retrying an uncertain submission.
+The transaction reuses its committed result without issuing another key or
+email, including after expiry or key replacement. Different details with the
+same UUID return `409 idempotency_conflict`. A new intended license needs a new
+UUID. The email queue uses the existing at-least-once SMTP transport and stable
+message ID; a lost SMTP acknowledgement may still cause provider redelivery.
+
+Seller overview and buyer `/me` license records include `provenance` (`paid` or
+`complimentary`) and `expires_at` (milliseconds or null). Internal notes appear
+only in authorized seller data. Complimentary rows have no plan, subscription,
+invoice or paid grant and retain `paid_through:0`; activation/status `paidThrough`
+continues to mean the access deadline for client compatibility. Expiration uses
+the same activation, seat, private package and update checks as paid entitlement.
+Existing revocation/restoration and buyer key replacement apply normally.
+
+`billingAvailable` describes provider configuration in seller overview and paid
+availability in buyer catalog/account responses. Without primary Stripe
+configuration, paid checkout, price validation, portal and reconciliation return
+`503 billing_unavailable`; webhook and billing workers cannot apply provider
+state. Configure and verify Stripe before enabling paid operations. Complimentary
+issuance never charges or enrolls the customer, including after Stripe is added.
 
 ## Platform operations and webhooks
 

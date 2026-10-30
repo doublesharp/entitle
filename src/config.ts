@@ -88,6 +88,11 @@ export interface Config {
     allowInsecureLocalDevelopment: boolean;
   };
 }
+export function stripeConfigured(
+  config: Pick<Config, "stripeSecret" | "stripeWebhookSecret">,
+) {
+  return !!config.stripeSecret && !!config.stripeWebhookSecret;
+}
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const { role: serverRole, slot: deploymentSlot } = serverIdentity({
     ...(env.SERVER_ROLE === undefined
@@ -221,9 +226,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const localBilling = env.LOCAL_BILLING === "true";
   if (production && localBilling)
     throw Error("LOCAL_BILLING is forbidden in production");
+  const stripeEnabled = [
+    env.STRIPE_SECRET_KEY,
+    env.STRIPE_WEBHOOK_SECRET,
+    env.STRIPE_PUBLISHABLE_KEY,
+    env.STRIPE_CONNECT_CLIENT_ID,
+    env.STRIPE_CONNECT_WEBHOOK_SECRET,
+    env.PLATFORM_STRIPE_PRICE_ID,
+    env.PLATFORM_PRO_STRIPE_PRICE_ID,
+  ].some(Boolean);
   if (
     production &&
-    (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET || !env.SMTP_HOST)
+    (!env.SMTP_HOST ||
+      (stripeEnabled && (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET)))
   )
     throw Error("Production requires Stripe and SMTP configuration");
   const data = env.DATA_DIR ?? "/Volumes/Scratch/entitle/data/local";
@@ -346,6 +361,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw Error("Production requires private S3 storage configuration");
   if (
     production &&
+    stripeEnabled &&
     deploymentMode === "hosted" &&
     (!env.STRIPE_CONNECT_CLIENT_ID ||
       !env.STRIPE_CONNECT_WEBHOOK_SECRET ||
@@ -359,6 +375,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw Error("Production standalone requires STANDALONE_OWNER_EMAIL");
   if (
     production &&
+    stripeEnabled &&
     deploymentMode === "standalone" &&
     !env.STRIPE_PUBLISHABLE_KEY
   )
@@ -433,9 +450,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         `${env.BUILD_DIR ?? "/Volumes/Scratch/entitle/build/main"}/web`,
     ),
     port: ports.PORT,
-    stripeSecret: env.STRIPE_SECRET_KEY ?? "sk_test_local",
+    stripeSecret: env.STRIPE_SECRET_KEY ?? (production ? "" : "sk_test_local"),
     stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY ?? "",
-    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? "whsec_local",
+    stripeWebhookSecret:
+      env.STRIPE_WEBHOOK_SECRET ?? (production ? "" : "whsec_local"),
     exemptSuffixes: (env.DEVELOPMENT_HOST_SUFFIXES ?? "")
       .split(",")
       .map((s) => s.trim().toLowerCase())
@@ -470,7 +488,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     graceDays: limits.GRACE_DAYS,
     stripeConnectClientId: env.STRIPE_CONNECT_CLIENT_ID ?? "",
     stripeConnectWebhookSecret:
-      env.STRIPE_CONNECT_WEBHOOK_SECRET ?? "whsec_connect_local",
+      env.STRIPE_CONNECT_WEBHOOK_SECRET ??
+      (production ? "" : "whsec_connect_local"),
     stripeLiveMode: env.STRIPE_LIVE_MODE === "true",
     platformPriceId: env.PLATFORM_STRIPE_PRICE_ID ?? "",
     s3: {

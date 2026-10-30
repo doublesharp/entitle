@@ -15,7 +15,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { createDb, createTenant } from "../src/db.ts";
 import { loadConfig } from "../src/config.ts";
 import { PlatformAuth } from "../src/platform-auth.ts";
@@ -29,6 +29,7 @@ import {
   registerCustomerAccountRoutes,
 } from "../src/account-management.ts";
 import { up, down } from "../src/migrations/009_accounts.ts";
+import { up as complimentarySchema } from "../src/migrations/014_complimentary_licenses.ts";
 
 async function migrateAccountsDb(db: ReturnType<typeof createDb>) {
   await db.migrate.latest({
@@ -47,6 +48,7 @@ async function migrateAccountsDb(db: ReturnType<typeof createDb>) {
         import(`../src/migrations/${name}.ts`),
     },
   });
+  await complimentarySchema(db);
 }
 
 const closureApproval = {
@@ -750,6 +752,87 @@ test("customer export uses an explicit field allowlist and excludes other buyers
   assert.equal(
     (await f.get("/export", "stranger-session", false)).json().licenses.length,
     0,
+  );
+});
+
+test("complimentary customer export preserves entitlement and closure scrubs private seller notes without a subscription", async (t) => {
+  const f = await fixture(t);
+  f.config.stripeSecret = "";
+  f.config.stripeWebhookSecret = "";
+  const expires = Date.now() + 86400000;
+  await license(f, {
+    plan_id: null,
+    subscription_id: null,
+    provenance: "complimentary",
+    paid_through: 0,
+    expires_at: expires,
+    billing_status: "complimentary",
+    revoked: 1,
+    issued_by: "owner",
+    issued_at: 1,
+    complimentary_request_id: randomUUID(),
+    complimentary_request_hash: hash("issuance"),
+    internal_note: "Invited by private-person@example.test",
+  });
+  const exported = await f.get("/export", "buyer-session", false);
+  assert.equal(exported.statusCode, 200, exported.body);
+  assert.equal(exported.json().licenses[0].provenance, "complimentary");
+  assert.equal(Number(exported.json().licenses[0].expires_at), expires);
+  assert.ok(!exported.body.includes("internal_note"));
+  assert.ok(!exported.body.includes("private-person@example.test"));
+  const request = (await f.post("/closure", {}, "buyer-session", false)).json()
+    .request;
+  const inspection = await f.customers.inspectClosure("buyer", request.id);
+  assert.deepEqual(JSON.parse(inspection.request.blockers), []);
+  const reconciliation = {
+    ...closureApproval,
+    reference: "reviewed complimentary closure",
+    stripeCustomerId: null,
+    eventIds: [],
+    workIds: [],
+    auditIds: [],
+    outgoingEventIds: [],
+  };
+  assert.equal(
+    (
+      await f.customers.reconcileClosure(
+        "buyer",
+        request.id,
+        "operator",
+        reconciliation,
+      )
+    ).reconciled,
+    true,
+  );
+  const result = await f.customers.approveClosure(
+    "buyer",
+    request.id,
+    "operator",
+    closureApproval,
+  );
+  assert.equal(result.status, "completed");
+  const retained = await f.db("licenses").first();
+  assert.equal(retained.provenance, "complimentary");
+  assert.equal(retained.internal_note, null);
+  assert.equal(retained.subscription_id, null);
+  const receipt = await f.db("account_privacy_receipts").first();
+  const details = JSON.parse(receipt.details);
+  delete details.stripeCustomerAttribution;
+  await f
+    .db("account_privacy_receipts")
+    .where({ id: receipt.id })
+    .update({ details: JSON.stringify(details) });
+  assert.equal(
+    (
+      await f.customers.upgradeClosureAttribution(
+        "buyer",
+        request.id,
+        "operator",
+        reconciliation,
+        false,
+      )
+    ).upgraded,
+    true,
   );
 });
 

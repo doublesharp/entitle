@@ -64,19 +64,29 @@ const terminal = (status: string) =>
 export class PlatformBilling {
   readonly db: DB;
   readonly config: PlatformConfig;
-  stripe: Stripe;
+  private client: Stripe | undefined;
   private portalConfigurationId: string | undefined;
   private portalConfigurationReturnUrl: string | undefined;
   constructor(db: DB, config: PlatformConfig, stripe?: Stripe) {
     this.db = db;
     this.config = config;
-    this.stripe =
-      stripe ??
-      new Stripe(config.stripeSecret, {
-        apiVersion: "2026-09-30.endive",
-        maxNetworkRetries: 2,
-        timeout: 20000,
-      });
+    this.client = stripe;
+  }
+  get stripe(): Stripe {
+    check(
+      this.client || this.config.stripeSecret,
+      503,
+      "billing_unavailable",
+      "Stripe billing is not configured.",
+    );
+    return (this.client ??= new Stripe(this.config.stripeSecret, {
+      apiVersion: "2026-09-30.endive",
+      maxNetworkRetries: 2,
+      timeout: 20000,
+    }));
+  }
+  set stripe(client: Stripe) {
+    this.client = client;
   }
   private external() {
     check(
@@ -91,6 +101,7 @@ export class PlatformBilling {
       "local_billing",
       "Stripe is disabled in local fixture mode.",
     );
+    void this.stripe;
   }
   private mode(livemode: boolean | undefined) {
     check(

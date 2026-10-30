@@ -36,6 +36,15 @@ Each export expires one hour after creation completes. Call `cleanupExpired()` p
 
 For a standalone export, construct `Portability` with the explicitly verified `sourceStripeAccountId`; hosted exports read the tenant's connected account. Standalone commerce keeps `stripe_account_id` null, as required by its direct-account Stripe adapter. Import records a hash of the expected merchant in an internal lock marker, and returns the source account ID for the operator's reconciliation record.
 
+Transfers preserve complimentary provenance, expiration, allowance and encrypted
+seller notes, and never reconcile those licenses as subscriptions or paid grants.
+Older paid bundles remain importable. This merchant-verified transfer workflow
+still requires a verified Stripe account even for a complimentary-only workspace.
+Before configuring Stripe, use the normal database/artifact backup and restore
+procedure for server recovery. Customer account data exports remain available
+without Stripe and exclude internal seller notes; approved customer closure
+scrubs those notes.
+
 ## Import and reconcile
 
 Use the [offline operator CLI](operator-maintenance.md#import-a-private-encrypted-export)

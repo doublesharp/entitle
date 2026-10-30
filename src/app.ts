@@ -7,6 +7,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import staticPlugin from "@fastify/static";
 import nodemailer from "nodemailer";
+import Stripe from "stripe";
 import { randomUUID, createHash } from "node:crypto";
 import {
   mkdir,
@@ -21,6 +22,7 @@ import { join, relative, sep, isAbsolute } from "node:path";
 import { z } from "zod";
 import type { DB, Tenant } from "./db.ts";
 import type { Config } from "./config.ts";
+import { stripeConfigured } from "./config.ts";
 import { Licenses } from "./licensing.ts";
 import { Artifacts } from "./artifacts.ts";
 import {
@@ -454,7 +456,8 @@ export async function buildApp(
   });
   const tenantTick = async (tenant: Tenant) => {
     const s = await makeEnvironment(tenant);
-    await s.billing.run((event) => s.stripe.resolveSubscription(event));
+    if (s.config.localBilling || stripeConfigured(s.config))
+      await s.billing.run((event) => s.stripe.resolveSubscription(event));
     const operations = new Operations(db, tenant.id);
     let cursor = notificationCursors.get(tenant.id) ?? null;
     for (let page = 0; page < 5; page++) {
@@ -521,7 +524,7 @@ export async function buildApp(
       markTickIdle = resolve;
     });
     try {
-      if (hosted) await platform.run();
+      if (hosted && (config.localBilling || stripeConfigured(config))) await platform.run();
       await platformOutbox.run();
       const publishers = await db<Tenant>("tenants")
         .orderBy("id")
@@ -889,7 +892,8 @@ export async function buildApp(
         { parseAs: "buffer" },
         (_req, body, done) => done(null, body),
       );
-      const eventFor = (req: FastifyRequest, secret: string) => {
+      const eventFor = (req: FastifyRequest, secret: string, sandbox = false) => {
+        check(sandbox ? !!config.stripeTestSecret && !!config.stripeTestWebhookSecret : stripeConfigured(config), 503, "billing_unavailable", "Stripe billing is not configured.");
         const signature = req.headers["stripe-signature"];
         check(
           typeof signature === "string" && Buffer.isBuffer(req.body),
@@ -899,7 +903,7 @@ export async function buildApp(
         );
         let event: unknown;
         try {
-          event = platform.stripe.webhooks.constructEvent(
+          event = (sandbox ? Stripe.webhooks : platform.stripe.webhooks).constructEvent(
             req.body,
             signature,
             secret,
@@ -968,7 +972,7 @@ export async function buildApp(
           "not_found",
           "Stripe test webhooks are not configured.",
         );
-        const event = eventFor(req, config.stripeTestWebhookSecret);
+        const event = eventFor(req, config.stripeTestWebhookSecret, true);
         check(
           !event.livemode,
           400,

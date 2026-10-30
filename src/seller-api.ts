@@ -22,6 +22,8 @@ import { tenantMetrics } from "./metrics.ts";
 import { AccountManagement } from "./account-management.ts";
 import { validateAssetMetadata } from "./package-validation.ts";
 import { frameworks, validateFrameworkConfig } from "./frameworks.ts";
+import { complimentaryInput } from "./licensing.ts";
+import { stripeConfigured } from "./config.ts";
 const slug = z
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -104,7 +106,7 @@ export async function sellerRoutes(
       (route.endsWith("/products") ||
         route.endsWith("/releases/:product/:version") ||
         route.endsWith("/assets/:product/:version") ||
-        route.includes("/local/"));
+        route.includes("/local/") || route.endsWith("/licenses/complimentary"));
     if (capacity && s.config.deploymentMode === "hosted")
       check(
         tenantAvailable(
@@ -154,7 +156,7 @@ export async function sellerRoutes(
     const licenses = await db("licenses")
       .join("customers", "customers.id", "licenses.customer_id")
       .join("products", "products.id", "licenses.product_id")
-      .join("plans", "plans.id", "licenses.plan_id")
+      .leftJoin("plans", "plans.id", "licenses.plan_id")
       .where("licenses.tenant_id", tenant.id)
       .select(
         "licenses.id",
@@ -163,6 +165,10 @@ export async function sellerRoutes(
         "licenses.site_allowance",
         "licenses.paid_through",
         "licenses.billing_status",
+        "licenses.provenance",
+        "licenses.expires_at",
+        "licenses.internal_note",
+        "licenses.issued_at",
         "licenses.revoked",
         "licenses.refund_revoked",
         "licenses.suspended",
@@ -183,9 +189,12 @@ export async function sellerRoutes(
       release.assets = assets.get(release.id) ?? [];
     return {
       tenant,
+      billingAvailable: config.localBilling || stripeConfigured(config),
       products,
       licenses: licenses.map((l) => ({
         ...l,
+        plan_name: l.plan_name ?? "Complimentary",
+        expires_at: l.expires_at === null ? null : Number(l.expires_at),
         paid_through: Number(l.paid_through),
         revoked: !!l.revoked || !!l.refund_revoked,
         suspended: !!l.suspended,
@@ -213,6 +222,7 @@ export async function sellerRoutes(
           interval: "year",
         })),
       };
+    check(stripeConfigured(config), 503, "billing_unavailable", "Stripe billing is not configured.");
     check(
       config.deploymentMode === "standalone" || tenant.stripe_account_id,
       409,
@@ -283,12 +293,12 @@ export async function sellerRoutes(
               })
               .strict(),
           )
-          .min(1)
           .max(50),
       })
       .strict()
       .parse(req.body);
-    if (!config.localBilling) {
+    if (!config.localBilling && input.plans.length) {
+      check(stripeConfigured(config), 503, "billing_unavailable", "Stripe billing is not configured.");
       check(
         config.deploymentMode === "standalone" || tenant.stripe_account_id,
         409,
@@ -451,6 +461,14 @@ export async function sellerRoutes(
     });
     await audit(req, "product.configured", { product_id: result.product.id });
     return result;
+  });
+  app.post("/licenses/complimentary", async (req) => {
+    const { db, tenant, licensing } = context(req);
+    const input = complimentaryInput.parse(req.body);
+    const header = req.headers.authorization;
+    const key = header ? await db("tenant_api_keys").where({ tenant_id: tenant.id, key_hash: hash(header.slice(7)) }).first("id") : undefined;
+    const actor = key ? { type: "api_key" as const, id: key.id as string } : { type: "seller" as const, id: (await auth.seller(req, false)).user.id };
+    return licensing.issueComplimentary(input, actor);
   });
   app.post("/licenses/:id/revoke", async (req) => {
     const { db, tenant } = context(req),
@@ -761,6 +779,7 @@ export async function sellerRoutes(
     return payments.portal(context(req).tenant);
   });
   app.post("/reconcile", async (req) => {
+    check(context(req).config.localBilling || stripeConfigured(context(req).config), 503, "billing_unavailable", "Stripe billing is not configured.");
     const { stripe, billing } = context(req),
       input = z
         .object({ subscriptionId: z.string().min(1).max(150).optional() })

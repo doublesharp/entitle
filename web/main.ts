@@ -109,6 +109,7 @@ export function mountCustomerApp(
       const account = ref<Account | null>(null);
       const privacyOpen = ref(false);
       const products = ref<Product[]>([]);
+      const billingAvailable = ref(true);
       const loading = ref(true);
       const catalogLoading = ref(true);
       const sessionError = ref("");
@@ -203,9 +204,12 @@ export function mountCustomerApp(
         catalogLoading.value = true;
         catalogError.value = "";
         try {
-          products.value = (
-            await api.get<{ products: Product[] }>("/catalog")
-          ).products;
+          const catalog = await api.get<{
+            products: Product[];
+            billingAvailable?: boolean;
+          }>("/catalog");
+          billingAvailable.value = catalog.billingAvailable !== false;
+          products.value = catalog.products;
           if (!selectedPlan.value)
             selectedPlan.value = products.value[0]?.plans[0]?.id || "";
         } catch (failure) {
@@ -488,7 +492,13 @@ export function mountCustomerApp(
           [
             h("div", { class: "card-heading" }, [
               h("div", [
-                h("p", { class: "eyebrow" }, license.plan_name),
+                h(
+                  "p",
+                  { class: "eyebrow" },
+                  license.provenance === "complimentary"
+                    ? "Complimentary"
+                    : license.plan_name,
+                ),
                 h("h3", { id: `license-${license.id}` }, license.product_name),
               ]),
               h(
@@ -507,8 +517,20 @@ export function mountCustomerApp(
             ]),
             h("dl", { class: "license-facts" }, [
               h("div", [
-                h("dt", "Paid through"),
-                h("dd", date(license.paid_through)),
+                h(
+                  "dt",
+                  license.provenance === "complimentary"
+                    ? "Expires"
+                    : "Paid through",
+                ),
+                h(
+                  "dd",
+                  date(
+                    license.provenance === "complimentary"
+                      ? (license.expires_at ?? null)
+                      : license.paid_through,
+                  ),
+                ),
               ]),
               h("div", [
                 h(
@@ -518,11 +540,18 @@ export function mountCustomerApp(
                 h("dd", `${active} of ${license.site_allowance} used`),
               ]),
               h("div", [
-                h("dt", "Billing"),
+                h(
+                  "dt",
+                  license.provenance === "complimentary"
+                    ? "License type"
+                    : "Billing",
+                ),
                 h(
                   "dd",
                   { class: "capitalize" },
-                  license.billing_status.replaceAll("_", " "),
+                  license.provenance === "complimentary"
+                    ? "Complimentary · no subscription"
+                    : license.billing_status.replaceAll("_", " "),
                 ),
               ]),
             ]),
@@ -921,16 +950,17 @@ export function mountCustomerApp(
                               account.value.customer.email,
                             ),
                           ]),
-                          button(
-                            busy.value === "portal"
-                              ? "Opening billing…"
-                              : "Manage billing ↗",
-                            portal,
-                            {
-                              class: "button-secondary",
-                              disabled: interactionBusy(),
-                            },
-                          ),
+                          account.value.billingAvailable !== false &&
+                            button(
+                              busy.value === "portal"
+                                ? "Opening billing…"
+                                : "Manage billing ↗",
+                              portal,
+                              {
+                                class: "button-secondary",
+                                disabled: interactionBusy(),
+                              },
+                            ),
                         ]),
                         h(
                           "details",
@@ -1120,117 +1150,123 @@ export function mountCustomerApp(
                           { class: "button-secondary" },
                         ),
                       ])
-                    : products.value.length === 0
+                    : !billingAvailable.value
                       ? h(
                           "p",
                           { class: "empty-message" },
-                          "No plans are available yet. Please check back soon.",
+                          "Paid checkout is unavailable until the publisher configures billing. Complimentary licenses remain available in your account.",
                         )
-                      : h(
-                          "form",
-                          { onSubmit: checkout, class: "checkout-form" },
-                          [
-                            ...products.value.map((product) =>
-                              h(
-                                "fieldset",
-                                { key: product.id, class: "product-plans" },
-                                [
-                                  h("legend", product.name),
-                                  h(
-                                    "div",
-                                    { class: "plans-grid" },
-                                    product.plans.map((plan) =>
-                                      h(
-                                        "label",
-                                        {
-                                          class: [
-                                            "plan-card",
-                                            selectedPlan.value === plan.id &&
-                                              "plan-selected",
-                                          ],
-                                          key: plan.id,
-                                        },
-                                        [
-                                          h("input", {
-                                            type: "radio",
-                                            name: "plan",
-                                            value: plan.id,
-                                            checked:
-                                              selectedPlan.value === plan.id,
-                                            onChange: () => {
-                                              selectedPlan.value = plan.id;
-                                            },
-                                            required: true,
-                                            disabled: checkoutOpen.value,
-                                          }),
-                                          h(
-                                            "span",
-                                            { class: "plan-name" },
-                                            plan.name,
-                                          ),
-                                          h("span", { class: "plan-seats" }, [
-                                            String(plan.site_allowance),
+                      : products.value.length === 0
+                        ? h(
+                            "p",
+                            { class: "empty-message" },
+                            "No plans are available yet. Please check back soon.",
+                          )
+                        : h(
+                            "form",
+                            { onSubmit: checkout, class: "checkout-form" },
+                            [
+                              ...products.value.map((product) =>
+                                h(
+                                  "fieldset",
+                                  { key: product.id, class: "product-plans" },
+                                  [
+                                    h("legend", product.name),
+                                    h(
+                                      "div",
+                                      { class: "plans-grid" },
+                                      product.plans.map((plan) =>
+                                        h(
+                                          "label",
+                                          {
+                                            class: [
+                                              "plan-card",
+                                              selectedPlan.value === plan.id &&
+                                                "plan-selected",
+                                            ],
+                                            key: plan.id,
+                                          },
+                                          [
+                                            h("input", {
+                                              type: "radio",
+                                              name: "plan",
+                                              value: plan.id,
+                                              checked:
+                                                selectedPlan.value === plan.id,
+                                              onChange: () => {
+                                                selectedPlan.value = plan.id;
+                                              },
+                                              required: true,
+                                              disabled: checkoutOpen.value,
+                                            }),
                                             h(
                                               "span",
-                                              ` ${seatUnit(product)}${plan.site_allowance === 1 ? "" : "s"}`,
+                                              { class: "plan-name" },
+                                              plan.name,
                                             ),
-                                          ]),
-                                          h(
-                                            "span",
-                                            { class: "muted small" },
-                                            "Annual subscription",
-                                          ),
-                                        ],
+                                            h("span", { class: "plan-seats" }, [
+                                              String(plan.site_allowance),
+                                              h(
+                                                "span",
+                                                ` ${seatUnit(product)}${plan.site_allowance === 1 ? "" : "s"}`,
+                                              ),
+                                            ]),
+                                            h(
+                                              "span",
+                                              { class: "muted small" },
+                                              "Annual subscription",
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            h("div", { class: "checkout-bar" }, [
-                              h("div", { class: "checkout-email" }, [
-                                h(
-                                  "label",
-                                  { for: "checkout-email" },
-                                  "Purchase email",
+                                  ],
                                 ),
-                                h("input", {
-                                  id: "checkout-email",
-                                  disabled: checkoutOpen.value,
-                                  type: "email",
-                                  autocomplete: "email",
-                                  required: true,
-                                  placeholder: "you@example.com",
-                                  value: checkoutEmail.value,
-                                  onInput: (event: Event) => {
-                                    checkoutEmail.value = (
-                                      event.target as HTMLInputElement
-                                    ).value;
+                              ),
+                              h("div", { class: "checkout-bar" }, [
+                                h("div", { class: "checkout-email" }, [
+                                  h(
+                                    "label",
+                                    { for: "checkout-email" },
+                                    "Purchase email",
+                                  ),
+                                  h("input", {
+                                    id: "checkout-email",
+                                    disabled: checkoutOpen.value,
+                                    type: "email",
+                                    autocomplete: "email",
+                                    required: true,
+                                    placeholder: "you@example.com",
+                                    value: checkoutEmail.value,
+                                    onInput: (event: Event) => {
+                                      checkoutEmail.value = (
+                                        event.target as HTMLInputElement
+                                      ).value;
+                                    },
+                                  }),
+                                ]),
+                                h(
+                                  "button",
+                                  {
+                                    type: "submit",
+                                    disabled:
+                                      loading.value ||
+                                      interactionBusy() ||
+                                      !selectedPlan.value ||
+                                      checkoutOpen.value,
                                   },
-                                }),
+                                  busy.value === "checkout"
+                                    ? "Preparing secure payment…"
+                                    : "Continue to payment",
+                                ),
                               ]),
                               h(
-                                "button",
-                                {
-                                  type: "submit",
-                                  disabled:
-                                    loading.value ||
-                                    interactionBusy() ||
-                                    !selectedPlan.value ||
-                                    checkoutOpen.value,
-                                },
-                                busy.value === "checkout"
-                                  ? "Preparing secure payment…"
-                                  : "Continue to payment",
+                                "p",
+                                { class: "small muted checkout-note" },
+                                "Your license becomes available after payment is confirmed. Expired licenses do not disable installed plugin features.",
                               ),
-                            ]),
-                            h(
-                              "p",
-                              { class: "small muted checkout-note" },
-                              "Your license becomes available after payment is confirmed. Expired licenses do not disable installed plugin features.",
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
               ],
             ),
             checkoutOpen.value && renderCheckout(),

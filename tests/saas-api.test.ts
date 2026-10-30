@@ -623,6 +623,7 @@ test("public catalog requires an explicit tenant namespace and platform info exp
   assert.deepEqual(scoped.json(), {
     tenant: { slug: "primary", name: "Primary" },
     products: [],
+    billingAvailable: true,
   });
   for (const url of [
     "/api/v1/catalog",

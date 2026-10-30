@@ -47,6 +47,7 @@ interface SellerProduct extends FrameworkProduct {
   }[];
 }
 interface Overview {
+  billingAvailable?: boolean;
   tenant: Tenant;
   sandbox?: {
     isSandbox: boolean;
@@ -62,6 +63,8 @@ interface Overview {
     plan_name: string;
     site_allowance: number;
     paid_through: number | null;
+    provenance?: "paid" | "complimentary";
+    expires_at?: number | null;
     billing_status: string;
     revoked: boolean;
     suspended: boolean;
@@ -280,6 +283,7 @@ export function mountSellerApp(
           keys = ref<Key[]>([]),
           recovery = ref(false),
           localMode = ref(false),
+          includePaidPlan = ref(false),
           keyScopes = ref(["read", "releases:write"]);
         const loading = ref(true),
           busy = ref(false),
@@ -330,7 +334,25 @@ export function mountSellerApp(
           "key-name": "",
           "key-expiry": "90",
           "config-product": "",
+          "complimentary-email": "",
+          "complimentary-product": "",
+          "complimentary-allowance": "1",
+          "complimentary-expiry": "",
+          "complimentary-note": "",
         });
+        let complimentaryDraft: {
+          signature: string;
+          requestId: string;
+        } | null = null;
+        let complimentaryWorkspace = "";
+        const clearComplimentary = () => {
+          complimentaryDraft = null;
+          fields.value["complimentary-email"] = "";
+          fields.value["complimentary-note"] = "";
+          fields.value["complimentary-expiry"] = "";
+          fields.value["complimentary-allowance"] = "1";
+          fields.value["complimentary-product"] = "";
+        };
         let receivedEmailChange: { id: string; token: string } | null = null;
         let emailChangeExpiresAt = 0;
         const retainEmailChange = (draft: EmailChangeDraft | null) => {
@@ -416,6 +438,8 @@ export function mountSellerApp(
           fields.value["key-verification-token"] = "";
           fields.value["release-verification-token"] = "";
           selected.value = "";
+          clearComplimentary();
+          complimentaryWorkspace = "";
         };
         const run = async (action: () => Promise<void>, expire = true) => {
           if (busy.value) return;
@@ -433,6 +457,10 @@ export function mountSellerApp(
           }
         };
         const dashboard = async () => {
+          if (complimentaryWorkspace !== selected.value) {
+            clearComplimentary();
+            complimentaryWorkspace = selected.value;
+          }
           panelProof.value = null;
           overview.value = null;
           recovery.value = false;
@@ -464,10 +492,13 @@ export function mountSellerApp(
                 }),
               api.get<{ keys: Key[] }>("/keys"),
             ]);
-            if (priceData.warning) error.value = priceData.warning;
+            if (priceData.warning && data.billingAvailable !== false)
+              error.value = priceData.warning;
             overview.value = data;
             prices.value = priceData.prices;
             localMode.value = priceData.localMode;
+            includePaidPlan.value =
+              data.billingAvailable !== false && priceData.prices.length > 0;
             keys.value = keyData.keys;
             fields.value["price-id"] = priceData.prices[0]?.id || "";
             fields.value["release-product"] = data.products[0]?.id || "";
@@ -476,6 +507,13 @@ export function mountSellerApp(
             fields.value["release-signature"] = "";
             fields.value["release-min-system-version"] = "";
             fields.value["config-product"] = data.products[0]?.slug || "";
+            if (
+              !data.products.some(
+                (p) => p.id === fields.value["complimentary-product"],
+              )
+            )
+              fields.value["complimentary-product"] =
+                data.products[0]?.id || "";
           } catch (failure) {
             if (!(failure instanceof ApiError) || failure.status !== 403)
               throw failure;
@@ -592,6 +630,13 @@ export function mountSellerApp(
               required,
               value: fields.value[id],
               min: type === "number" ? 1 : undefined,
+              max: id === "complimentary-allowance" ? 100000 : undefined,
+              maxlength:
+                id === "complimentary-note"
+                  ? 2000
+                  : id === "complimentary-email"
+                    ? 254
+                    : undefined,
               onInput: (event: Event) => {
                 fields.value[id] = (event.target as HTMLInputElement).value;
               },
@@ -653,13 +698,19 @@ export function mountSellerApp(
                   type: "submit",
                   disabled:
                     busy.value ||
-                    (id === "product-create" && !prices.value.length),
+                    (id === "complimentary-issue" &&
+                      !overview.value?.products.length),
                 },
                 label,
               ),
             ] as Parameters<typeof h>[2],
           );
-          return ["product-create", "release-upload", "key-create"].includes(id)
+          return [
+            "product-create",
+            "release-upload",
+            "key-create",
+            "complimentary-issue",
+          ].includes(id)
             ? h("details", { id: `${id}-disclosure`, class: "seller-create" }, [
                 h("summary", label),
                 node,
@@ -865,7 +916,9 @@ export function mountSellerApp(
                   ]),
                   h(
                     "p",
-                    "Receive customer payments through your Stripe account.",
+                    data.billingAvailable === false
+                      ? "Paid checkout and billing are unavailable until Stripe is configured. You can issue complimentary licenses now."
+                      : "Receive customer payments through your Stripe account.",
                   ),
                   hosted.value &&
                     h(
@@ -879,7 +932,7 @@ export function mountSellerApp(
                           void run(() =>
                             redirect(tenantApi(), "/stripe/connect"),
                           ),
-                        busy.value,
+                        busy.value || data.billingAvailable === false,
                       )
                     : h(
                         "p",
@@ -924,7 +977,7 @@ export function mountSellerApp(
                             void run(() =>
                               redirect(tenantApi(), "/platform/checkout"),
                             ),
-                          busy.value,
+                          busy.value || data.billingAvailable === false,
                         ),
                       btn(
                         "Platform billing",
@@ -932,7 +985,7 @@ export function mountSellerApp(
                           void run(() =>
                             redirect(tenantApi(), "/platform/portal"),
                           ),
-                        busy.value,
+                        busy.value || data.billingAvailable === false,
                       ),
                     ]),
                   hosted.value &&
@@ -1046,7 +1099,9 @@ export function mountSellerApp(
               !prices.value.length &&
                 h(
                   "p",
-                  "Connect Stripe and create an active annual recurring price to add a product.",
+                  data.billingAvailable === false
+                    ? "Create a product for complimentary licensing. Configure Stripe and an annual price before selling paid plans."
+                    : "Create a product for complimentary licensing now. Connect Stripe and create an active annual recurring price to add a paid plan.",
                 ),
               form(
                 "product-create",
@@ -1059,13 +1114,17 @@ export function mountSellerApp(
                     ...(fields.value["product-framework"] === "wordpress"
                       ? { pluginBasename: fields.value["plugin-basename"] }
                       : {}),
-                    plans: [
-                      {
-                        name: fields.value["plan-name"],
-                        siteAllowance: Number(fields.value["site-allowance"]),
-                        priceId: fields.value["price-id"],
-                      },
-                    ],
+                    plans: !includePaidPlan.value
+                      ? []
+                      : [
+                          {
+                            name: fields.value["plan-name"],
+                            siteAllowance: Number(
+                              fields.value["site-allowance"],
+                            ),
+                            priceId: fields.value["price-id"],
+                          },
+                        ],
                   });
                   await dashboard();
                   notice.value = "Product created.";
@@ -1134,28 +1193,50 @@ export function mountSellerApp(
                         label: value,
                       })),
                     ),
-                  field("plan-name", "Plan name"),
-                  field(
-                    "site-allowance",
-                    seatUnit({
-                      framework: fields.value["product-framework"] as Framework,
-                      frameworkConfig: {
-                        activationKind: fields.value["activation-kind"] as
-                          "site" | "device",
-                      },
-                    }) === "site"
-                      ? "Site allowance"
-                      : "Device allowance",
-                    "number",
-                  ),
-                  select(
-                    "price-id",
-                    "Annual Stripe price",
-                    prices.value.map((price) => ({
-                      value: price.id,
-                      label: `${price.productName} · ${price.nickname || price.id} · ${price.unit_amount === null ? "Custom price" : money(price.currency, String(price.unit_amount))}/${price.interval}`,
-                    })),
-                  ),
+                  h("div", { class: "form-field" }, [
+                    h("label", { for: "include-paid-plan" }, [
+                      h("input", {
+                        id: "include-paid-plan",
+                        type: "checkbox",
+                        checked: includePaidPlan.value,
+                        disabled:
+                          data.billingAvailable === false ||
+                          !prices.value.length,
+                        onChange: (event: Event) => {
+                          includePaidPlan.value = (
+                            event.target as HTMLInputElement
+                          ).checked;
+                        },
+                      }),
+                      " Include annual paid plan",
+                    ]),
+                  ]),
+                  includePaidPlan.value && field("plan-name", "Plan name"),
+                  includePaidPlan.value &&
+                    field(
+                      "site-allowance",
+                      seatUnit({
+                        framework: fields.value[
+                          "product-framework"
+                        ] as Framework,
+                        frameworkConfig: {
+                          activationKind: fields.value["activation-kind"] as
+                            "site" | "device",
+                        },
+                      }) === "site"
+                        ? "Site allowance"
+                        : "Device allowance",
+                      "number",
+                    ),
+                  includePaidPlan.value &&
+                    select(
+                      "price-id",
+                      "Annual Stripe price",
+                      prices.value.map((price) => ({
+                        value: price.id,
+                        label: `${price.productName} · ${price.nickname || price.id} · ${price.unit_amount === null ? "Custom price" : money(price.currency, String(price.unit_amount))}/${price.interval}`,
+                      })),
+                    ),
                 ],
                 "Create product",
               ),
@@ -1452,6 +1533,90 @@ export function mountSellerApp(
               ),
             ]),
             panel("licenses", "Licenses", [
+              form(
+                "complimentary-issue",
+                async () => {
+                  const input = {
+                    email:
+                      fields.value["complimentary-email"]!.trim().toLowerCase(),
+                    productId: fields.value["complimentary-product"]!,
+                    siteAllowance: Number(
+                      fields.value["complimentary-allowance"],
+                    ),
+                    expiresAt: new Date(
+                      fields.value["complimentary-expiry"]!,
+                    ).getTime(),
+                    note: fields.value["complimentary-note"]!.trim(),
+                  };
+                  if (
+                    !Number.isSafeInteger(input.siteAllowance) ||
+                    input.siteAllowance < 1 ||
+                    input.siteAllowance > 100000 ||
+                    !Number.isFinite(input.expiresAt) ||
+                    input.expiresAt <= Date.now()
+                  ) {
+                    error.value =
+                      "Choose an installation allowance from 1 to 100000 and a future expiration date.";
+                    return;
+                  }
+                  const signature = JSON.stringify([selected.value, input]);
+                  if (complimentaryDraft?.signature !== signature)
+                    complimentaryDraft = {
+                      signature,
+                      requestId: crypto.randomUUID(),
+                    };
+                  const request = {
+                    ...input,
+                    requestId: complimentaryDraft.requestId,
+                    confirm: true,
+                  };
+                  const api = tenantApi();
+                  const product = data.products.find(
+                    (p) => p.id === input.productId,
+                  )!;
+                  confirm(
+                    `Issue a complimentary ${product.name} license to ${input.email}, allowing ${input.siteAllowance} installations until ${new Date(input.expiresAt).toLocaleString()}? No payment or subscription will be created.`,
+                    "Confirm complimentary license",
+                    async () => {
+                      await api.post("/licenses/complimentary", request);
+                      complimentaryDraft = null;
+                      fields.value["complimentary-email"] = "";
+                      fields.value["complimentary-note"] = "";
+                      notice.value =
+                        "License issued; license key email queued.";
+                    },
+                  );
+                },
+                [
+                  h(
+                    "p",
+                    "Issue a normal license without a payment or subscription. Expiration stops new activations, downloads and updates; installed software keeps working.",
+                  ),
+                  field("complimentary-email", "Customer email", "email"),
+                  select(
+                    "complimentary-product",
+                    "Product",
+                    data.products.map((p) => ({ value: p.id, label: p.name })),
+                  ),
+                  field(
+                    "complimentary-allowance",
+                    "Installation allowance",
+                    "number",
+                  ),
+                  field(
+                    "complimentary-expiry",
+                    "Expiration date and time (your local time)",
+                    "datetime-local",
+                  ),
+                  field(
+                    "complimentary-note",
+                    "Internal note (optional)",
+                    "text",
+                    false,
+                  ),
+                ],
+                "Issue complimentary license",
+              ),
               h("div", { class: "table-scroll" }, [
                 h("table", [
                   h("caption", "Customer entitlements for this workspace"),
@@ -1463,7 +1628,7 @@ export function mountSellerApp(
                         "Product and plan",
                         "Seats",
                         "Billing",
-                        "Paid through",
+                        "Paid through / Expires",
                         "Access",
                         "Action",
                       ].map((label) => h("th", { scope: "col" }, label)),
@@ -1476,15 +1641,26 @@ export function mountSellerApp(
                         h("td", license.customer_email),
                         h(
                           "td",
-                          `${license.product_name} · ${license.plan_name}`,
+                          `${license.product_name} · ${license.provenance === "complimentary" ? "Complimentary" : license.plan_name}`,
                         ),
                         h("td", String(license.site_allowance)),
-                        h("td", license.billing_status),
                         h(
                           "td",
-                          license.paid_through
+                          license.provenance === "complimentary"
+                            ? "Complimentary · no subscription"
+                            : license.billing_status,
+                        ),
+                        h(
+                          "td",
+                          (
+                            license.provenance === "complimentary"
+                              ? license.expires_at
+                              : license.paid_through
+                          )
                             ? new Date(
-                                license.paid_through,
+                                (license.provenance === "complimentary"
+                                  ? license.expires_at
+                                  : license.paid_through)!,
                               ).toLocaleDateString()
                             : "Not yet available",
                         ),
@@ -1494,7 +1670,9 @@ export function mountSellerApp(
                             ? "Revoked"
                             : license.suspended
                               ? "Suspended"
-                              : "See paid through",
+                              : license.provenance === "complimentary"
+                                ? "See expiration"
+                                : "See paid through",
                         ),
                         h(
                           "td",

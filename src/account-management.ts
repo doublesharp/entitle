@@ -787,6 +787,9 @@ export class CustomerAccounts {
           "revoked",
           "refund_revoked",
           "suspended",
+          "provenance",
+          "expires_at",
+          "issued_at",
         );
       const licenseIds = licenses.map((row) => row.id as string);
       const grants = await tx("grants")
@@ -926,7 +929,7 @@ export class CustomerAccounts {
         licenses.every(
           (l) =>
             (l.revoked || l.refund_revoked) &&
-            (!l.subscription_id.startsWith("sub_") ||
+            (!l.subscription_id?.startsWith("sub_") ||
               ["canceled", "incomplete_expired"].includes(l.billing_status)),
         ),
         409,
@@ -942,7 +945,9 @@ export class CustomerAccounts {
       const references = new Set([
         customer.id,
         customer.email,
-        ...licenses.flatMap((l) => [l.id, l.subscription_id]),
+        ...licenses.flatMap((l) =>
+          l.subscription_id ? [l.id, l.subscription_id] : [l.id],
+        ),
         ...grants.map((g) => g.invoice_id as string),
       ]);
       if (customer.stripe_id) references.add(customer.stripe_id);
@@ -1214,7 +1219,7 @@ export class CustomerAccounts {
         const licenses = await tx<License>("licenses").where(scope);
         check(
           !licenses.some((license) =>
-            license.subscription_id.startsWith("sub_"),
+            license.subscription_id?.startsWith("sub_"),
           ),
           409,
           "privacy_attribution_mismatch",
@@ -1267,7 +1272,7 @@ export class CustomerAccounts {
       .filter(
         (l) =>
           (!l.revoked && !l.refund_revoked) ||
-          (l.subscription_id.startsWith("sub_") &&
+          (l.subscription_id?.startsWith("sub_") &&
             !["canceled", "incomplete_expired"].includes(l.billing_status)),
       )
       .map((l) => l.id);
@@ -1277,7 +1282,7 @@ export class CustomerAccounts {
     if (
       licenses.some(
         (l) =>
-          l.subscription_id.startsWith("sub_") &&
+          l.subscription_id?.startsWith("sub_") &&
           !["canceled", "incomplete_expired"].includes(l.billing_status),
       )
     )
@@ -1310,7 +1315,9 @@ export class CustomerAccounts {
     const references = new Set([
       customerId,
       customer.email,
-      ...licenses.flatMap((l) => [l.id, l.subscription_id]),
+      ...licenses.flatMap((l) =>
+        l.subscription_id ? [l.id, l.subscription_id] : [l.id],
+      ),
       ...grants.map((g) => g.invoice_id as string),
       ...ownedInstallations.map((i) => i.id as string),
     ]);
@@ -1539,6 +1546,7 @@ export class CustomerAccounts {
       await tx("emails").where(scope).delete();
       await tx("login_tokens").where(scope).delete();
       await tx("sessions").where(scope).delete();
+      await tx("licenses").where(scope).update({ internal_note: null });
       await tx("customers")
         .where({ tenant_id: tenant, id: customerId })
         .update({

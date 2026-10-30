@@ -149,6 +149,8 @@ export interface Release {
   min_free: string | null;
 }
 export interface License extends FrameworkProduct {
+  provenance?: "paid" | "complimentary";
+  expires_at?: number | null;
   id: string;
   product_id: string;
   product_name: string;
@@ -163,6 +165,7 @@ export interface License extends FrameworkProduct {
   releases: Release[];
 }
 export interface Account {
+  billingAvailable?: boolean;
   customer: { id: string; email: string };
   csrfToken: string;
   licenses: License[];

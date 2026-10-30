@@ -58,8 +58,12 @@ credentials. Set STANDALONE_OWNER_EMAIL; only this verified address may sign in
 as publisher and it receives primary membership after verification. Use
 `/t/primary` for buyers and `/api/v1/stripe/merchant-webhook` for signed merchant
 events with STRIPE_WEBHOOK_SECRET. No Connect client ID, Connect webhook secret
-or platform price is needed. Production still requires matching Stripe secret
-and publishable keys, SMTP, private S3 and the trusted HTTPS proxy.
+or platform price is needed. Production requires SMTP, private S3 and the trusted
+HTTPS proxy. For a complimentary pilot before configuring Stripe, set
+`LOCAL_BILLING=false` and omit all Stripe, Connect and platform price settings.
+Products and real complimentary licenses can be managed without a payment
+provider. Paid checkout and billing remain unavailable. When enabling paid
+billing, provide the complete matching Stripe key and webhook configuration.
 
 Existing SaaS databases must keep DEPLOYMENT_MODE=hosted. Standalone refuses
 databases with additional tenants, a connected Stripe account or platform
@@ -191,7 +195,7 @@ The root filesystem is read-only; only `/data` is writable. Only the proxy publi
 
 ## Stripe Connect and platform billing, hosted only
 
-For `DEPLOYMENT_MODE=hosted`, supply platform `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET` and `PLATFORM_STRIPE_PRICE_ID`. Set STRIPE_LIVE_MODE explicitly. Use test mode until separately qualified. Hosted production startup requires these settings, SMTP and private S3; standalone does not require Connect credentials or a platform price. No live charge is needed to qualify the application locally.
+For paid billing in `DEPLOYMENT_MODE=hosted`, supply platform `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET` and `PLATFORM_STRIPE_PRICE_ID`. Set STRIPE_LIVE_MODE explicitly. Use test mode until separately qualified. Hosted production accepts all these billing settings absent for complimentary licensing; once any are provided, the complete set is required. SMTP and private S3 remain required. Standalone does not require Connect credentials or a platform price. No live charge is needed to qualify the application locally.
 
 Configure Connect Standard OAuth with fixed redirect `PUBLIC_ORIGIN/api/v1/platform/stripe/callback`. Sellers sign in and connect their own account. Account binding is immutable once established; reconnecting that account is supported. New accounts require a distinct tenant so historical price/customer references cannot silently move. Disconnection blocks new sales, preserves purchased time and keeps reconciliation failures retryable. It does not extend licenses indefinitely or disable installed software.
 

@@ -27,9 +27,10 @@ or pricing commitment. See [hosted tiers and fees](docs/hosted-pricing.md).
 
 1. Follow [Getting started](docs/getting-started.md) for hosted setup, a local
    fixture or a self-hosted installation.
-2. Create a product and annual plan in the seller dashboard.
+2. Create a product in the seller dashboard; add an annual Stripe plan for paid sales.
 3. Integrate a client and publish an immutable release.
-4. Complete a purchase, activation and normal update before accepting customers.
+4. Issue a [complimentary license](docs/seller-guide.md) for an invited pilot, or
+   complete a purchase. Verify activation and a normal update before accepting customers.
 
 Local development needs the Node/pnpm versions pinned in the repository, a mail
 sink and private S3. The optional source-built S3 fixture also needs its exact
@@ -38,6 +39,8 @@ See [Development](docs/development.md) for tools and storage paths.
 
 ## Capabilities
 
+- Complimentary licenses with explicit expiration, installation allowances and
+  emailed keys, usable in production before Stripe is configured.
 - Server-controlled Stripe Checkout and custom Stripe Elements forms, Billing
   reconciliation and Customer Portal access.
 - Tenant isolation, scoped automation keys, transactional seat limits and

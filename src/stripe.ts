@@ -18,7 +18,7 @@ export interface GuestCheckout {
   issueGuestClaim?: (customerId: string) => void;
 }
 export class StripeBilling implements BillingSource {
-  stripe: Stripe;
+  private client: Stripe | undefined;
   db: DB;
   config: Config;
   readonly tenant: Readonly<Tenant>;
@@ -26,13 +26,25 @@ export class StripeBilling implements BillingSource {
     this.tenant = Object.freeze({ ...tenant });
     this.db = db;
     this.config = config;
-    this.stripe = new Stripe(config.stripeSecret, {
+  }
+  get stripe(): Stripe {
+    check(
+      this.client || this.config.stripeSecret,
+      503,
+      "billing_unavailable",
+      "Stripe billing is not configured.",
+    );
+    return (this.client ??= new Stripe(this.config.stripeSecret, {
       apiVersion: "2026-09-30.endive",
       maxNetworkRetries: 2,
       timeout: 20000,
-    });
+    }));
+  }
+  set stripe(client: Stripe) {
+    this.client = client;
   }
   options(): Stripe.RequestOptions {
+    void this.stripe;
     if (this.config.deploymentMode === "standalone") {
       check(
         this.tenant.id === "primary" && !this.tenant.stripe_account_id,
@@ -211,6 +223,7 @@ export class StripeBilling implements BillingSource {
       "local_billing",
       "Stripe product tax configuration cannot be verified in local fixture mode.",
     );
+    void this.stripe;
     if (taxCode)
       await this.stripe.taxCodes.retrieve(taxCode, {}, this.options());
     const plans = await this.db<Plan>("plans").where({
@@ -304,6 +317,8 @@ export class StripeBilling implements BillingSource {
       "local_billing",
       "Stripe checkout is disabled in local fixture mode. Configure Stripe test credentials to exercise checkout.",
     );
+    // Reject unavailable billing before creating a local customer or guest claim.
+    void this.stripe;
     check(
       !["disconnected", "restricted"].includes(this.tenant.stripe_status),
       409,
@@ -463,7 +478,10 @@ export class StripeBilling implements BillingSource {
         ...(this.config.deploymentMode === "hosted"
           ? { stripeAccount: this.tenant.stripe_account_id! }
           : {}),
-        returnUrl: appUrl(this.config, `/t/${this.tenant.slug}?checkout=return`),
+        returnUrl: appUrl(
+          this.config,
+          `/t/${this.tenant.slug}?checkout=return`,
+        ),
       };
     }
     check(
