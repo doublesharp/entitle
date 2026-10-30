@@ -591,6 +591,7 @@ export function mountSellerApp(
           if (seller.value && seller.value.user.id !== value.user.id)
             retainEmailChange(null);
           seller.value = value;
+          token.value = null;
           platform.csrfToken = value.csrfToken;
           restoreEmailChange();
           receiveEmailChange();
@@ -644,7 +645,9 @@ export function mountSellerApp(
             }
           }
           if (fragment.has("seller-login")) {
-            token.value = fragment.get("seller-login") || "";
+            token.value = seller.value
+              ? null
+              : fragment.get("seller-login") || "";
             window.history.replaceState(
               null,
               "",
@@ -2500,7 +2503,9 @@ export function mountSellerApp(
               notice.value &&
                 h("p", { role: "status", class: "notice" }, notice.value),
               busy.value && h("p", { role: "status" }, "Working…"),
-              token.value !== null &&
+              !loading.value &&
+                !seller.value &&
+                token.value !== null &&
                 section("Confirm seller sign in", [
                   h(
                     "p",
