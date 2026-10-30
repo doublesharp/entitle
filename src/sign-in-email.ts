@@ -35,7 +35,7 @@ export function signInEmail(
   return {
     to,
     subject: `Sign in to ${site.name}`,
-    text: `Sign in to ${site.name}\n\nContinue to ${destination}.\nSigning in as: ${to}\n\nOpen ${url}\n\n${instructions}\n${expiry}\n\n${ignore}`,
+    text: `Open ${url}\n\nSign in to ${site.name}\nContinue to ${destination}.\nSigning in as: ${to}\n\n${instructions}\n${expiry}\n\n${ignore}`,
     html: `<!doctype html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
