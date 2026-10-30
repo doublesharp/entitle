@@ -2808,3 +2808,206 @@ td button {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Guided setup keeps instructions beside the next concrete action. */
+.setup-overview,
+.setup-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 28px;
+  padding: 24px 28px;
+  border: 1px solid #cddfd3;
+  border-radius: 12px;
+  background: #edf5ef;
+}
+.setup-overview > div,
+.setup-context > div:first-child {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+.seller-content .setup-overview h2,
+.setup-context h2 {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+.setup-overview p:last-child,
+.setup-context p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.setup-context .button-row {
+  margin: 0;
+}
+.setup-wizard {
+  display: grid;
+  gap: 28px;
+}
+.setup-intro {
+  max-width: 62ch;
+}
+.seller-content .setup-intro h3 {
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+  line-height: 1.3;
+}
+.setup-intro > p:not(.eyebrow) {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.setup-intro .setup-progress {
+  margin: 20px 0 10px;
+  font-weight: 650;
+  color: var(--accent);
+}
+.setup-intro progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e3ebe6;
+}
+.setup-intro progress::-webkit-progress-bar {
+  background: #e3ebe6;
+}
+.setup-intro progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 8px;
+}
+.setup-product-picker {
+  max-width: 420px;
+}
+.setup-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.4fr);
+  gap: 28px;
+  align-items: start;
+}
+.seller-panel .setup-steps {
+  grid-column: 1;
+  grid-row: 1;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.seller-panel .setup-steps > li {
+  margin: 0;
+}
+.seller-app .setup-step {
+  margin: 0;
+  width: 100%;
+  justify-content: start;
+  text-align: left;
+  padding: 16px;
+  gap: 14px;
+  border-color: #e1e7e3;
+  line-height: 1.45;
+}
+.seller-app .setup-step[aria-current="step"] {
+  border-color: #8cae99;
+  background: #edf5ef;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.setup-step-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  height: 30px;
+  border: 1px solid #cfdbd2;
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.is-complete .setup-step-number {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.setup-step-status {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.setup-task {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  padding: 24px;
+  background: #f7f9f7;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.seller-content .setup-task h3 {
+  font-size: 1.25rem;
+}
+.setup-task p {
+  font-size: 0.875rem;
+}
+.setup-location {
+  display: grid;
+  gap: 6px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: #335548;
+}
+.setup-location > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.setup-prerequisite {
+  color: #765c24;
+}
+.setup-optional {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.setup-optional > div {
+  flex: 1 1 24rem;
+}
+.seller-content .setup-optional h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+.setup-optional p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+@media (max-width: 1024px) {
+  .setup-task,
+  .seller-panel .setup-steps {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .setup-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .seller-panel .setup-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .setup-overview,
+  .setup-context,
+  .setup-task {
+    padding: 20px 18px;
+  }
+  .seller-panel .setup-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
